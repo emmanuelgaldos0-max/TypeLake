@@ -27,6 +27,18 @@ export function usuarioBase(nombres: string, apellidos: string) {
   return base || "alumno";
 }
 
+const PARTICULAS = new Set(["de", "del", "la", "las", "los", "y"]);
+
+/** "QUISPE DE LA CRUZ" → "Quispe de la Cruz" */
+export function nombrePropio(texto: string) {
+  return texto
+    .trim()
+    .toLocaleLowerCase("es")
+    .split(/\s+/)
+    .map((p, i) => (i > 0 && PARTICULAS.has(p) ? p : p.charAt(0).toLocaleUpperCase("es") + p.slice(1)))
+    .join(" ");
+}
+
 /** Orden para listas: inicial 0x, primaria 1x, secundaria 2x. */
 export function ordenDeGrado(nombre: string) {
   const n = Number(nombre.match(/\d+/)?.[0] ?? 0);

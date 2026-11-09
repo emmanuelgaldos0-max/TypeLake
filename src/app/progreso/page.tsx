@@ -7,7 +7,7 @@ import { crearClienteServidor, obtenerSesion } from "@/lib/supabase/server";
 
 interface FilaIntento {
   ppm: number;
-  precision_pct: number;
+  precision_pct: number | null; // null en notas importadas de Excel
   creado_en: string;
   estado: string;
   modo: string;
@@ -31,14 +31,23 @@ export default async function PaginaProgreso() {
     db.from("formulas_promedio").select("id, nombre").eq("visible_alumnos", true).order("id"),
   ]);
 
-  const intentos = ((data ?? []) as FilaIntento[]).map((i) => ({ ...i, ppm: Number(i.ppm), precision_pct: Number(i.precision_pct) }));
+  const intentos = ((data ?? []) as FilaIntento[]).map((i) => ({
+    ...i,
+    ppm: Number(i.ppm),
+    precision_pct: i.precision_pct === null ? null : Number(i.precision_pct),
+  }));
   const validos = intentos.filter((i) => i.estado === "valido" || i.estado === "aprobado");
   const ultimos10 = validos.slice(-10);
   const enRevision = intentos.filter((i) => i.estado === "sospechoso").length;
 
   const record = validos.length ? Math.max(...validos.map((i) => i.ppm)) : null;
   const promedioPpm = promedio(ultimos10.map((i) => i.ppm));
-  const promedioPrecision = promedio(ultimos10.map((i) => i.precision_pct));
+  const promedioPrecision = promedio(
+    validos
+      .filter((i) => i.precision_pct !== null)
+      .slice(-10)
+      .map((i) => i.precision_pct!),
+  );
 
   // Teclas con más errores en los últimos 30 intentos
   const conteo: Record<string, number> = {};

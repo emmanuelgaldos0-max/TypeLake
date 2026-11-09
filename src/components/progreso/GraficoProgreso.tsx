@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 export interface PuntoProgreso {
   fecha: string;
   ppm: number;
-  precision: number;
+  precision: number | null;
   medicion: boolean;
 }
 
@@ -130,7 +130,7 @@ export default function GraficoProgreso({ puntos }: { puntos: PuntoProgreso[] })
           </div>
           <div className="text-slate-500">{formatoFecha.format(new Date(p.fecha))}</div>
           <div className="mt-1 text-sm font-semibold text-slate-800">{p.ppm} ppm</div>
-          <div className="text-slate-600">{p.precision}% de precisión</div>
+          {p.precision !== null && <div className="text-slate-600">{p.precision}% de precisión</div>}
         </div>
       )}
 

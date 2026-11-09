@@ -24,6 +24,7 @@ export default async function Encabezado() {
             <>
               <Link href="/admin" className="text-slate-600 hover:text-sky-700">Panel</Link>
               <Link href="/admin/alumnos" className="text-slate-600 hover:text-sky-700">Alumnos</Link>
+              <Link href="/admin/mediciones" className="text-slate-600 hover:text-sky-700">Mediciones</Link>
             </>
           )}
           {perfil ? (

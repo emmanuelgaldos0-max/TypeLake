@@ -1,6 +1,8 @@
 "use server";
 
+import { randomInt } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { crearClienteAdmin, emailDeUsuario, obtenerSesion } from "@/lib/supabase/server";
 import { generarClave, normalizar, ordenDeGrado, usuarioBase } from "@/lib/credenciales";
 
@@ -25,23 +27,26 @@ async function exigirAdmin() {
 }
 
 const limpiar = (s: string) => String(s ?? "").trim().replace(/\s+/g, " ");
+const claveAlumno = (nombres: string, apellidos: string, salonId: number) => `${normalizar(nombres)}|${normalizar(apellidos)}|${salonId}`;
 
-/** Crea las cuentas de una tanda de alumnos (máx. 25 por llamada). */
-export async function crearAlumnos(filas: FilaAlumno[]): Promise<ResultadoAlumno[]> {
-  await exigirAdmin();
-  if (filas.length > 25) throw new Error("Máximo 25 alumnos por tanda");
-  const db = crearClienteAdmin();
-
+/**
+ * Carga grados, salones y alumnos existentes una vez, y ofrece funciones para
+ * obtener/crear salones y alumnos sin duplicados.
+ */
+async function contextoAlumnos(db: SupabaseClient) {
   const { data: cfg } = await db.from("configuracion").select("anio_escolar").single();
   const anio = cfg!.anio_escolar as number;
 
-  // Grados y salones (se crean si no existen)
   const { data: grados } = await db.from("grados").select("id, nombre");
   const gradoPorNombre = new Map((grados ?? []).map((g) => [normalizar(g.nombre), g.id as number]));
   const { data: salones } = await db.from("salones").select("id, grado_id, seccion").eq("anio", anio);
   const salonPorClave = new Map((salones ?? []).map((s) => [`${s.grado_id}|${s.seccion.toUpperCase()}`, s.id as number]));
 
-  const obtenerSalon = async (grado: string, seccion: string) => {
+  const { data: perfiles } = await db.from("perfiles").select("id, usuario, nombres, apellidos, salon_id").eq("rol", "alumno");
+  const usados = new Set((perfiles ?? []).map((p) => p.usuario as string));
+  const alumnoPorClave = new Map((perfiles ?? []).map((p) => [claveAlumno(p.nombres, p.apellidos, p.salon_id), p.id as string]));
+
+  const salonId = async (grado: string, seccion: string) => {
     const claveGrado = normalizar(grado);
     let gradoId = gradoPorNombre.get(claveGrado);
     if (!gradoId) {
@@ -51,20 +56,43 @@ export async function crearAlumnos(filas: FilaAlumno[]): Promise<ResultadoAlumno
       gradoPorNombre.set(claveGrado, gradoId);
     }
     const claveSalon = `${gradoId}|${seccion.toUpperCase()}`;
-    let salonId = salonPorClave.get(claveSalon);
-    if (!salonId) {
+    let id = salonPorClave.get(claveSalon);
+    if (!id) {
       const { data, error } = await db.from("salones").insert({ grado_id: gradoId, seccion: seccion.toUpperCase(), anio }).select("id").single();
       if (error) throw new Error(`No se pudo crear el salón ${grado} ${seccion}: ${error.message}`);
-      salonId = data.id as number;
-      salonPorClave.set(claveSalon, salonId);
+      id = data.id as number;
+      salonPorClave.set(claveSalon, id);
     }
-    return salonId;
+    return id;
   };
 
-  // Usuarios existentes para evitar duplicados
-  const { data: perfiles } = await db.from("perfiles").select("usuario, nombres, apellidos, salon_id").eq("rol", "alumno");
-  const usados = new Set((perfiles ?? []).map((p) => p.usuario as string));
-  const existentes = new Set((perfiles ?? []).map((p) => `${normalizar(p.nombres)}|${normalizar(p.apellidos)}|${p.salon_id}`));
+  const buscarAlumno = (nombres: string, apellidos: string, salon: number) => alumnoPorClave.get(claveAlumno(nombres, apellidos, salon));
+
+  const crearAlumno = async (nombres: string, apellidos: string, salon: number) => {
+    const base = usuarioBase(nombres, apellidos);
+    let usuario = base;
+    for (let n = 2; usados.has(usuario); n++) usuario = `${base}${n}`;
+    const clave = generarClave();
+    const { data, error } = await db.auth.admin.createUser({
+      email: emailDeUsuario(usuario),
+      password: clave,
+      email_confirm: true,
+      app_metadata: { rol: "alumno", usuario, nombres, apellidos, salon_id: salon },
+    });
+    if (error) throw new Error(error.message);
+    usados.add(usuario);
+    alumnoPorClave.set(claveAlumno(nombres, apellidos, salon), data.user.id);
+    return { id: data.user.id, usuario, clave };
+  };
+
+  return { salonId, buscarAlumno, crearAlumno };
+}
+
+/** Crea las cuentas de una tanda de alumnos (máx. 25 por llamada). */
+export async function crearAlumnos(filas: FilaAlumno[]): Promise<ResultadoAlumno[]> {
+  await exigirAdmin();
+  if (filas.length > 25) throw new Error("Máximo 25 alumnos por tanda");
+  const ctx = await contextoAlumnos(crearClienteAdmin());
 
   const resultados: ResultadoAlumno[] = [];
   for (const original of filas) {
@@ -76,27 +104,12 @@ export async function crearAlumnos(filas: FilaAlumno[]): Promise<ResultadoAlumno
     };
     try {
       if (!fila.grado || !fila.seccion || !fila.nombres || !fila.apellidos) throw new Error("Faltan datos en la fila");
-      const salonId = await obtenerSalon(fila.grado, fila.seccion);
-
-      if (existentes.has(`${normalizar(fila.nombres)}|${normalizar(fila.apellidos)}|${salonId}`)) {
+      const salon = await ctx.salonId(fila.grado, fila.seccion);
+      if (ctx.buscarAlumno(fila.nombres, fila.apellidos, salon)) {
         resultados.push({ ...fila, estado: "ya_existe", detalle: "Ya tiene cuenta en este salón" });
         continue;
       }
-
-      const base = usuarioBase(fila.nombres, fila.apellidos);
-      let usuario = base;
-      for (let n = 2; usados.has(usuario); n++) usuario = `${base}${n}`;
-      const clave = generarClave();
-
-      const { error } = await db.auth.admin.createUser({
-        email: emailDeUsuario(usuario),
-        password: clave,
-        email_confirm: true,
-        app_metadata: { rol: "alumno", usuario, nombres: fila.nombres, apellidos: fila.apellidos, salon_id: salonId },
-      });
-      if (error) throw new Error(error.message);
-
-      usados.add(usuario);
+      const { usuario, clave } = await ctx.crearAlumno(fila.nombres, fila.apellidos, salon);
       resultados.push({ ...fila, usuario, clave, estado: "creado" });
     } catch (e) {
       resultados.push({ ...fila, estado: "error", detalle: e instanceof Error ? e.message : String(e) });
@@ -126,4 +139,128 @@ export async function cambiarActivo(alumnoId: string, activo: boolean) {
   // Bloquear también el inicio de sesión
   await db.auth.admin.updateUserById(alumnoId, { ban_duration: activo ? "none" : "876000h" });
   revalidatePath("/admin/alumnos");
+}
+
+// ───────────────────────── Importación de mediciones ─────────────────────────
+
+export interface NotaImportada {
+  nombres: string;
+  apellidos: string;
+  notas: number[]; // PPM de cada intento (WPM 1, WPM 2…), ya sin celdas vacías/x/W/Justify
+}
+
+export interface ResultadoImportacion {
+  nombres: string;
+  apellidos: string;
+  estado: "importado" | "sin_notas" | "error";
+  cuentaNueva?: { usuario: string; clave: string };
+  intentos: number;
+  detalle?: string;
+}
+
+const LIMA = "-05:00";
+
+function codigoAleatorio() {
+  const letras = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from({ length: 6 }, () => letras[randomInt(letras.length)]).join("");
+}
+
+/** Crea (o reutiliza, si ya existe con el mismo nombre) una medición pasada de un día completo. */
+export async function prepararMedicionHistorica(nombre: string, fecha: string): Promise<number> {
+  const sesion = await exigirAdmin();
+  const db = crearClienteAdmin();
+  nombre = limpiar(nombre);
+  if (!nombre) throw new Error("Escribe un nombre para la medición");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) throw new Error("Fecha no válida");
+
+  const { data: existente } = await db.from("mediciones").select("id").eq("nombre", nombre).maybeSingle();
+  const inicia = `${fecha}T00:00:00${LIMA}`;
+  const termina = `${fecha}T23:59:00${LIMA}`;
+  if (existente) {
+    await db.from("mediciones").update({ inicia_en: inicia, termina_en: termina }).eq("id", existente.id);
+    return existente.id as number;
+  }
+  for (let intento = 0; intento < 5; intento++) {
+    const { data, error } = await db
+      .from("mediciones")
+      .insert({ nombre, codigo: codigoAleatorio(), inicia_en: inicia, termina_en: termina, duracion_seg: 60, creado_por: sesion.perfil.id })
+      .select("id")
+      .single();
+    if (!error) return data.id as number;
+    if (!error.message.includes("codigo")) throw new Error(error.message);
+  }
+  throw new Error("No se pudo generar un código único");
+}
+
+/**
+ * Importa las notas de un salón (máx. 25 alumnos por llamada).
+ * Crea las cuentas que falten y reemplaza los intentos previos de esos alumnos en la medición.
+ */
+export async function importarNotasMedicion(
+  medicionId: number,
+  fecha: string,
+  grado: string,
+  seccion: string,
+  filas: NotaImportada[],
+): Promise<ResultadoImportacion[]> {
+  await exigirAdmin();
+  if (filas.length > 25) throw new Error("Máximo 25 alumnos por tanda");
+  const db = crearClienteAdmin();
+  const ctx = await contextoAlumnos(db);
+  const salon = await ctx.salonId(limpiar(grado), limpiar(seccion));
+  const creadoEn = `${fecha}T10:00:00${LIMA}`;
+
+  const resultados: ResultadoImportacion[] = [];
+  for (const f of filas) {
+    const nombres = limpiar(f.nombres);
+    const apellidos = limpiar(f.apellidos);
+    try {
+      if (!nombres || !apellidos) throw new Error("Nombre incompleto");
+      let alumnoId = ctx.buscarAlumno(nombres, apellidos, salon);
+      let cuentaNueva: ResultadoImportacion["cuentaNueva"];
+      if (!alumnoId) {
+        const nuevo = await ctx.crearAlumno(nombres, apellidos, salon);
+        alumnoId = nuevo.id;
+        cuentaNueva = { usuario: nuevo.usuario, clave: nuevo.clave };
+      }
+
+      // Reemplazar lo importado antes para este alumno en esta medición
+      await db.from("intentos").delete().eq("medicion_id", medicionId).eq("alumno_id", alumnoId);
+
+      const notas = f.notas.filter((n) => Number.isFinite(n) && n >= 0 && n < 1000);
+      if (notas.length) {
+        const { error } = await db.from("intentos").insert(
+          notas.map((ppm, i) => {
+            const correctos = Math.round(ppm * 5);
+            return {
+              alumno_id: alumnoId,
+              salon_id: salon,
+              modo: "medicion",
+              medicion_id: medicionId,
+              duracion_seg: 60,
+              ppm: Math.round(ppm * 10) / 10,
+              ppm_bruta: Math.round(ppm * 10) / 10,
+              precision_pct: null,
+              correctos,
+              incorrectos: 0,
+              pulsaciones: correctos,
+              errores: 0,
+              senales: { importado: true, columna: i + 1 },
+              estado: "aprobado",
+              motivos: ["importado_de_excel"],
+              creado_en: new Date(new Date(creadoEn).getTime() + i * 60000).toISOString(),
+            };
+          }),
+        );
+        if (error) throw new Error(error.message);
+      }
+      resultados.push({ nombres, apellidos, estado: notas.length ? "importado" : "sin_notas", cuentaNueva, intentos: notas.length });
+    } catch (e) {
+      resultados.push({ nombres, apellidos, estado: "error", intentos: 0, detalle: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  revalidatePath("/admin/mediciones");
+  revalidatePath("/admin/alumnos");
+  return resultados;
 }
