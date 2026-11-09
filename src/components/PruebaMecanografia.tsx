@@ -551,6 +551,17 @@ function PanelResultado({
   const ppm = useContador(r.ppm);
   const precision = useContador(r.precision, 1400, 250);
   const revelado = ppm.listo && precision.listo;
+  // No se puede reiniciar hasta que la puntuación se vea completa (contadores + aparición del detalle)
+  const [puedeReiniciar, setPuedeReiniciar] = useState(false);
+  const botonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!revelado) return;
+    const t = setTimeout(() => setPuedeReiniciar(true), 500);
+    return () => clearTimeout(t);
+  }, [revelado]);
+  useEffect(() => {
+    if (puedeReiniciar) botonRef.current?.focus();
+  }, [puedeReiniciar]);
 
   const peores = Object.entries(r.erroresPorTecla)
     .sort((a, b) => b[1] - a[1])
@@ -623,7 +634,13 @@ function PanelResultado({
         )}
       </div>
 
-      <button onClick={onOtraVez} autoFocus className="btn btn-primario px-6 py-3 text-base">
+      <button
+        ref={botonRef}
+        onClick={onOtraVez}
+        disabled={!puedeReiniciar}
+        aria-disabled={!puedeReiniciar}
+        className="btn btn-primario px-6 py-3 text-base transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+      >
         Intentar con otro texto
         <kbd className="ml-1 rounded-md bg-white/20 px-1.5 py-0.5 text-xs font-medium">Enter</kbd>
       </button>
