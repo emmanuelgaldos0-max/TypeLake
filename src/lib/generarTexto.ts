@@ -1,4 +1,4 @@
-import { FRAGMENTOS, type Nivel } from "@/data/textos";
+import { FRAGMENTOS } from "@/data/textos";
 
 function barajar<T>(lista: T[]): T[] {
   const copia = [...lista];
@@ -10,14 +10,14 @@ function barajar<T>(lista: T[]): T[] {
 }
 
 /**
- * Arma un texto nuevo combinando fragmentos al azar del nivel indicado,
+ * Arma un texto nuevo combinando fragmentos al azar de todo el banco
  * hasta tener al menos `minCaracteres`. Así cada prueba es distinta.
  */
-export function generarTexto(nivel: Nivel, minCaracteres = 1200, evitarInicio?: string): string {
-  const disponibles = FRAGMENTOS.filter((f) => f.nivel === nivel).map((f) => f.texto);
+export function generarTexto(minCaracteres = 1200): string {
+  const disponibles = FRAGMENTOS.map((f) => f.texto);
   const partes: string[] = [];
   let largo = 0;
-  let ultimo = evitarInicio;
+  let ultimo: string | undefined;
 
   while (largo < minCaracteres) {
     let tanda = barajar(disponibles);
