@@ -1,5 +1,6 @@
 ﻿import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Encabezado from "@/components/Encabezado";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -24,12 +25,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}>
+        <Encabezado />
+        <div className="flex-1 flex flex-col">{children}</div>
       </body>
     </html>
   );
 }
-

@@ -10,12 +10,19 @@ type Estado = "listo" | "escribiendo" | "terminado";
 const DURACION_SEG = 60;
 const ALTO_LINEA_REM = 2.6;
 
-interface Props {
-  duracionSeg?: number;
-  onTerminar?: (r: Resultado, nivel: Nivel) => void;
+export interface AvisoGuardado {
+  tipo: "ok" | "aviso" | "error" | "cargando";
+  texto: string;
 }
 
-export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, onTerminar }: Props) {
+interface Props {
+  duracionSeg?: number;
+  /** Si se pasa, el resultado se guarda al terminar y se muestra el aviso devuelto. */
+  guardar?: (r: Resultado, nivel: Nivel) => Promise<AvisoGuardado>;
+}
+
+export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar }: Props) {
+  const [aviso, setAviso] = useState<AvisoGuardado | null>(null);
   const [nivel, setNivel] = useState<Nivel>(1);
   const [objetivo, setObjetivo] = useState("");
   const [escrito, setEscrito] = useState("");
@@ -67,6 +74,7 @@ export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, onTermi
       setEscrito("");
       setRestante(duracionSeg);
       setResultado(null);
+      setAviso(null);
       cambiarEstado("listo");
       if (areaRef.current) areaRef.current.value = "";
       requestAnimationFrame(() => areaRef.current?.focus());
@@ -104,8 +112,13 @@ export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, onTermi
       },
     };
     setResultado(r);
-    onTerminar?.(r, nivel);
-  }, [duracionSeg, nivel, onTerminar]);
+    if (guardar) {
+      setAviso({ tipo: "cargando", texto: "Guardando resultado..." });
+      guardar(r, nivel)
+        .then(setAviso)
+        .catch(() => setAviso({ tipo: "error", texto: "No se pudo guardar el resultado." }));
+    }
+  }, [duracionSeg, nivel, guardar]);
 
   // Temporizador
   useEffect(() => {
@@ -328,7 +341,7 @@ export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, onTermi
           )}
         </div>
       ) : (
-        resultado && <PanelResultado r={resultado} onOtraVez={() => reiniciar()} />
+        resultado && <PanelResultado r={resultado} aviso={aviso} onOtraVez={() => reiniciar()} />
       )}
 
       <p className="text-center text-sm text-slate-500 mt-4">
@@ -357,7 +370,14 @@ function nombreTecla(t: string) {
   return t;
 }
 
-function PanelResultado({ r, onOtraVez }: { r: Resultado; onOtraVez: () => void }) {
+const ESTILO_AVISO: Record<AvisoGuardado["tipo"], string> = {
+  ok: "bg-emerald-50 border-emerald-200 text-emerald-700",
+  aviso: "bg-amber-50 border-amber-200 text-amber-800",
+  error: "bg-rose-50 border-rose-200 text-rose-700",
+  cargando: "bg-slate-50 border-slate-200 text-slate-500",
+};
+
+function PanelResultado({ r, aviso, onOtraVez }: { r: Resultado; aviso: AvisoGuardado | null; onOtraVez: () => void }) {
   const peores = Object.entries(r.erroresPorTecla)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 6);
@@ -382,6 +402,8 @@ function PanelResultado({ r, onOtraVez }: { r: Resultado; onOtraVez: () => void 
       </div>
 
       <p className="text-lg text-slate-700 mb-6">{mensaje}</p>
+
+      {aviso && <p className={`text-sm border rounded-lg px-4 py-2 mb-6 inline-block ${ESTILO_AVISO[aviso.tipo]}`}>{aviso.texto}</p>}
 
       {peores.length > 0 && (
         <div className="mb-6">
