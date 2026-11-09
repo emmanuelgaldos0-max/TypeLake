@@ -2,12 +2,14 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { preferenciaMemes } from "@/lib/memesServidor";
+import { archivosDeCarpeta, limpiarMemesHuerfanos, preferenciaMemes } from "@/lib/memesServidor";
 import { crearClienteAdmin, obtenerSesion } from "@/lib/supabase/server";
 import {
   MAX_BYTES,
   MAX_MB,
   MAX_PENDIENTES_ALUMNO,
+  MAX_SIN_CONFIRMAR_ALUMNO,
+  MAX_SUBIDAS_HORA_ALUMNO,
   TIPOS,
   categoriaDe,
   columnasCriterio,
@@ -97,6 +99,18 @@ export async function prepararSubidaMeme(tipo: string, bytes: number): Promise<R
     const { count } = await db.from("memes").select("id", { count: "exact", head: true }).eq("subido_por", sesion.user.id).eq("estado", "pendiente");
     if ((count ?? 0) >= MAX_PENDIENTES_ALUMNO) {
       return { error: `Ya tienes ${MAX_PENDIENTES_ALUMNO} memes esperando aprobación. Espera a que el profesor los revise.` };
+    }
+
+    // Evitar que se llene el almacenamiento con imágenes subidas pero nunca confirmadas:
+    // primero se limpian las abandonadas, luego se limita por hora y por subidas abiertas.
+    await limpiarMemesHuerfanos(sesion.user.id);
+    const archivos = await archivosDeCarpeta(sesion.user.id);
+    const haceUnaHora = Date.now() - 60 * 60 * 1000;
+    if (archivos.filter((a) => a.creado > haceUnaHora).length >= MAX_SUBIDAS_HORA_ALUMNO) {
+      return { error: `Subiste muchas imágenes en la última hora (máximo ${MAX_SUBIDAS_HORA_ALUMNO}). Vuelve a intentarlo más tarde.` };
+    }
+    if (archivos.filter((a) => !a.registrado).length >= MAX_SIN_CONFIRMAR_ALUMNO) {
+      return { error: "Tienes subidas sin terminar. Espera unos minutos y vuelve a intentarlo." };
     }
   }
   const ruta = `${sesion.user.id}/${randomUUID()}.${EXTENSION[tipo]}`;

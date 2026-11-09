@@ -18,6 +18,10 @@ export const MAX_MB = 5; // los GIF animados suelen pesar más de 2 MB
 export const MAX_BYTES = MAX_MB * 1024 * 1024;
 export const TIPOS = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 export const MAX_PENDIENTES_ALUMNO = 5;
+/** Imágenes que un alumno puede subir por hora (confirmadas o no). */
+export const MAX_SUBIDAS_HORA_ALUMNO = 6;
+/** Subidas sin confirmar que un alumno puede tener a la vez. */
+export const MAX_SIN_CONFIRMAR_ALUMNO = 2;
 
 /** Categoría de un intento frente a la marca anterior (null = primer intento: cuenta como récord). */
 export function categoriaDe(ppm: number, referencia: number | null): CategoriaRecord {
