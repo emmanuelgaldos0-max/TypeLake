@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import GraficoProgreso, { type PuntoProgreso } from "@/components/progreso/GraficoProgreso";
 import RankingAlumnos from "@/components/progreso/RankingAlumnos";
 import PromedioSalones from "@/components/progreso/PromedioSalones";
+import RetoProfesor from "@/components/RetoProfesor";
+import { recordProfesorVisible } from "@/lib/profesor";
 import { crearClienteServidor, obtenerSesion } from "@/lib/supabase/server";
 
 interface FilaIntento {
@@ -22,7 +24,7 @@ export default async function PaginaProgreso() {
   if (sesion.perfil.rol === "admin") redirect("/admin");
 
   const db = await crearClienteServidor();
-  const [{ data }, { data: formulas }, { data: cfg }] = await Promise.all([
+  const [{ data }, { data: formulas }, { data: cfg }, reto] = await Promise.all([
     db
       .from("intentos")
       .select("ppm, precision_pct, creado_en, estado, modo, errores_por_tecla")
@@ -31,6 +33,7 @@ export default async function PaginaProgreso() {
     db.from("formulas_promedio").select("id, nombre").eq("visible_alumnos", true).order("id"),
     // select("*") para no fallar si la migración 10 aún no se aplicó
     db.from("configuracion").select("*").single(),
+    recordProfesorVisible(),
   ]);
   const verOtrosSalones = (cfg as { ver_otros_salones?: boolean } | null)?.ver_otros_salones !== false;
   let mejorColegio: number | null = null;
@@ -80,6 +83,7 @@ export default async function PaginaProgreso() {
         <div>
           <h1 className="titulo-pagina">Mi progreso</h1>
           <p className="text-slate-500 text-sm">Así vas mejorando, {sesion.perfil.nombres.split(" ")[0]}.</p>
+          {reto && <RetoProfesor record={reto} className="mt-3" />}
         </div>
         <Link href="/" className="btn btn-primario">
           Practicar ahora

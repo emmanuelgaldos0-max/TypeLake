@@ -1,5 +1,7 @@
 import Link from "next/link";
+import InterruptorProfesor from "@/components/admin/InterruptorProfesor";
 import InterruptorVisibilidad from "@/components/admin/InterruptorVisibilidad";
+import { mejorResultadoProfesor } from "@/lib/profesor";
 import { crearClienteServidor, obtenerSesion } from "@/lib/supabase/server";
 
 const ICONOS = {
@@ -32,6 +34,8 @@ export default async function PanelAdmin() {
   // select("*") para no fallar si la migración 10 aún no se aplicó
   const { data: cfg } = await db.from("configuracion").select("*").single();
   const verOtrosSalones = (cfg as { ver_otros_salones?: boolean } | null)?.ver_otros_salones !== false;
+  const mostrarProfesor = (cfg as { mostrar_profesor?: boolean } | null)?.mostrar_profesor === true;
+  const miRecord = await mejorResultadoProfesor();
 
   const tarjetas = [
     { titulo: "Alumnos activos", valor: alumnos, href: "/admin/alumnos", icono: ICONOS.alumnos, color: "bg-lago-50 text-lago-600" },
@@ -86,7 +90,10 @@ export default async function PanelAdmin() {
 
       <div>
         <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-3">Lo que ven los alumnos</h2>
-        <InterruptorVisibilidad inicial={verOtrosSalones} />
+        <div className="space-y-4">
+          <InterruptorVisibilidad inicial={verOtrosSalones} />
+          <InterruptorProfesor inicial={mostrarProfesor} record={miRecord?.ppm ?? null} />
+        </div>
       </div>
 
       <div>

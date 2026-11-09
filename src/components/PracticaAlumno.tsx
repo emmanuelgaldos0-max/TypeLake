@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import { guardarResultadoProfesor, recordProfesor } from "@/app/admin/acciones";
 import PruebaMecanografia, { type AvisoGuardado } from "@/components/PruebaMecanografia";
 import { crearClienteNavegador } from "@/lib/supabase/client";
 import type { Resultado } from "@/lib/metricas";
@@ -16,9 +17,12 @@ const MOTIVOS: Record<string, string> = {
 
 export default function PracticaAlumno({
   guardar,
+  profesor = false,
   memes,
 }: {
   guardar: boolean;
+  /** El admin: sus pruebas van a resultados_profesor, aparte de las de los alumnos. */
+  profesor?: boolean;
   memes?: { cuenta: "alumno" | "sin_cuenta"; activos: boolean; bloqueados: boolean };
 }) {
   const registrar = useCallback(async (r: Resultado): Promise<AvisoGuardado> => {
@@ -53,5 +57,17 @@ export default function PracticaAlumno({
     return data ? Number(data.ppm) : null;
   }, []);
 
+  const registrarProfesor = useCallback(async (r: Resultado): Promise<AvisoGuardado> => {
+    try {
+      const fallo = await guardarResultadoProfesor(r);
+      return fallo
+        ? { tipo: "error", texto: `No se pudo guardar: ${fallo}` }
+        : { tipo: "ok", texto: "Guardado como resultado del profesor ✓ (no cuenta para ningún salón)" };
+    } catch {
+      return { tipo: "error", texto: "No se pudo guardar el resultado." };
+    }
+  }, []);
+
+  if (profesor) return <PruebaMecanografia guardar={registrarProfesor} obtenerRecord={recordProfesor} memes={memes} />;
   return <PruebaMecanografia guardar={guardar ? registrar : undefined} obtenerRecord={guardar ? obtenerRecord : undefined} memes={memes} />;
 }

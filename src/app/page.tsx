@@ -1,12 +1,16 @@
 import Link from "next/link";
 import PracticaAlumno from "@/components/PracticaAlumno";
+import RetoProfesor from "@/components/RetoProfesor";
+import { recordProfesorVisible } from "@/lib/profesor";
 import { preferenciaMemes } from "@/lib/memesServidor";
 import { obtenerSesion } from "@/lib/supabase/server";
 
 export default async function Inicio() {
   const sesion = await obtenerSesion();
   const esAlumno = sesion?.perfil.rol === "alumno";
+  const esAdmin = sesion?.perfil.rol === "admin";
   const nombre = sesion?.perfil.nombres.split(" ")[0];
+  const reto = esAdmin ? null : await recordProfesorVisible();
   // Memes: alumnos según su preferencia; sin cuenta, apagados hasta que los activen. El admin no los ve.
   const memes = esAlumno
     ? { cuenta: "alumno" as const, ...(await preferenciaMemes(sesion!.user.id)) }
@@ -42,6 +46,16 @@ export default async function Inicio() {
           )}
         </h1>
         <p className="text-slate-600 mt-3 text-base sm:text-lg">Escribe el texto lo más rápido y preciso que puedas durante 1 minuto.</p>
+        {reto && (
+          <div className="mt-4">
+            <RetoProfesor record={reto} />
+          </div>
+        )}
+        {esAdmin && (
+          <p className="mt-4 text-sm text-violet-800 bg-violet-50 border border-violet-200 inline-flex items-center gap-2 px-3 py-1.5 rounded-full">
+            Tus pruebas se guardan como resultado del profesor y no cuentan para ningún salón.
+          </p>
+        )}
         {!sesion && (
           <p className="mt-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 inline-flex items-center gap-2 px-3 py-1.5 rounded-full">
             Estás practicando sin cuenta: tus resultados no se guardarán.
@@ -51,7 +65,7 @@ export default async function Inicio() {
           </p>
         )}
       </div>
-      <PracticaAlumno guardar={esAlumno} memes={memes} />
+      <PracticaAlumno guardar={esAlumno} profesor={esAdmin} memes={memes} />
     </main>
   );
 }

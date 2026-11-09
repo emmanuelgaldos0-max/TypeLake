@@ -519,3 +519,60 @@ export async function cambiarVerOtrosSalones(ver: boolean): Promise<string | nul
   revalidatePath("/tablero");
   return null;
 }
+
+// ─── Resultado del profesor ──────────────────────────────────────────────────
+// Se guarda en resultados_profesor, nunca en intentos: no afecta a ningún salón.
+
+/** Guarda una prueba del admin. Las PPM se recalculan igual que para los alumnos. */
+export async function guardarResultadoProfesor(r: {
+  correctos: number;
+  incorrectos: number;
+  pulsaciones: number;
+  errores: number;
+  duracionSeg: number;
+}): Promise<string | null> {
+  const sesion = await exigirAdmin();
+  const nums = [r.correctos, r.incorrectos, r.pulsaciones, r.errores, r.duracionSeg];
+  if (!nums.every((n) => Number.isFinite(n) && n >= 0) || r.duracionSeg <= 0) return "Datos no válidos.";
+  const ppm = Math.round((r.correctos / 5 / (r.duracionSeg / 60)) * 10) / 10;
+  if (ppm > 300) return "Velocidad no válida.";
+  const precision = r.pulsaciones > 0 ? Math.round(Math.max(0, ((r.pulsaciones - r.errores) / r.pulsaciones) * 100) * 10) / 10 : null;
+  const { error } = await crearClienteAdmin()
+    .from("resultados_profesor")
+    .insert({ admin_id: sesion.user.id, ppm, precision_pct: precision === null ? null : Math.min(100, precision) });
+  if (error) return /resultados_profesor/.test(error.message) ? "Falta aplicar la migración 14 (resultado del profesor) en Supabase." : error.message;
+  revalidarProfesor();
+  return null;
+}
+
+/** Mejor resultado guardado del profesor (para comparar en la prueba). */
+export async function recordProfesor(): Promise<number | null> {
+  await exigirAdmin();
+  const { data } = await crearClienteAdmin().from("resultados_profesor").select("ppm").order("ppm", { ascending: false }).limit(1).maybeSingle();
+  return data ? Number(data.ppm) : null;
+}
+
+/** Muestra u oculta el récord del profesor a los alumnos y en el tablero. */
+export async function cambiarMostrarProfesor(mostrar: boolean): Promise<string | null> {
+  await exigirAdmin();
+  const { error } = await crearClienteAdmin()
+    .from("configuracion")
+    .update({ mostrar_profesor: mostrar, actualizado_en: new Date().toISOString() })
+    .eq("id", true);
+  if (error) return /mostrar_profesor/.test(error.message) ? "Falta aplicar la migración 14 (resultado del profesor) en Supabase." : error.message;
+  revalidarProfesor();
+  return null;
+}
+
+/** Borra todas las pruebas guardadas del profesor. */
+export async function borrarResultadosProfesor(): Promise<string | null> {
+  await exigirAdmin();
+  const { error } = await crearClienteAdmin().from("resultados_profesor").delete().gte("id", 0);
+  if (error) return error.message;
+  revalidarProfesor();
+  return null;
+}
+
+function revalidarProfesor() {
+  for (const ruta of ["/", "/admin", "/progreso", "/tablero"]) revalidatePath(ruta);
+}
