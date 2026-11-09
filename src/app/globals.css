@@ -26,6 +26,29 @@ body {
   animation: parpadeo 1s steps(2, start) infinite;
 }
 
+/* Letra actual cuando se pulsó una tecla equivocada: no se avanza hasta escribir la correcta */
+.letra-errada {
+  display: inline-block;
+  background: #fecdd3;
+  color: #be123c;
+  border-radius: 2px;
+  box-shadow: inset 2px 0 0 #e11d48;
+  animation: sacudir 0.18s ease-in-out;
+}
+
+@keyframes sacudir {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
+}
+
 @keyframes parpadeo {
   0%,
   100% {

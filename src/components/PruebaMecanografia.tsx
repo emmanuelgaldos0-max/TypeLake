@@ -23,6 +23,8 @@ interface Props {
 
 export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar }: Props) {
   const [aviso, setAviso] = useState<AvisoGuardado | null>(null);
+  const [letraErrada, setLetraErrada] = useState(false);
+  const [sacudir, setSacudir] = useState(0); // cambia en cada error para reiniciar la animación
   const [nivel, setNivel] = useState<Nivel>(1);
   const [objetivo, setObjetivo] = useState("");
   const [escrito, setEscrito] = useState("");
@@ -75,6 +77,7 @@ export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar
       setRestante(duracionSeg);
       setResultado(null);
       setAviso(null);
+      setLetraErrada(false);
       cambiarEstado("listo");
       if (areaRef.current) areaRef.current.value = "";
       requestAnimationFrame(() => areaRef.current?.focus());
@@ -165,15 +168,24 @@ export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar
       const agregados = nuevo.length - previo.length;
       if (agregados > 2) stats.current.insercionesMasivas++;
       const ahora = performance.now();
+      // Solo se aceptan letras correctas: con un error el cursor no avanza.
+      let aceptado = previo;
       for (let i = previo.length; i < nuevo.length; i++) {
         stats.current.pulsaciones++;
         stats.current.tiempos.push(ahora);
-        if (nuevo[i] !== obj[i]) {
+        if (nuevo[i] === obj[aceptado.length]) {
+          aceptado += nuevo[i];
+          setLetraErrada(false);
+        } else {
           stats.current.errores++;
-          const tecla = obj[i];
+          const tecla = obj[aceptado.length];
           stats.current.erroresPorTecla[tecla] = (stats.current.erroresPorTecla[tecla] ?? 0) + 1;
+          setLetraErrada(true);
+          setSacudir((n) => n + 1);
+          break;
         }
       }
+      nuevo = aceptado;
     }
 
     // Si se acerca al final, agregamos más texto.
@@ -319,13 +331,17 @@ export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar
                   {Array.from(p.texto).map((ch, j) => {
                     const i = p.inicio + j;
                     const esCursor = i === escrito.length;
-                    let clase = "";
-                    if (i < escrito.length) {
-                      clase = escrito[i] === ch ? "text-slate-800" : "bg-rose-200 text-rose-700 rounded-sm";
+                    let clase = i < escrito.length ? "text-slate-800" : "";
+                    if (esCursor) {
+                      if (letraErrada) clase = "letra-errada";
+                      else clase = enfocado ? "cursor-letra" : "border-b-2 border-slate-300";
                     }
-                    if (esCursor) clase += enfocado ? " cursor-letra" : " border-b-2 border-slate-300";
                     return (
-                      <span key={i} ref={esCursor ? cursorRef : undefined} className={clase}>
+                      <span
+                        key={esCursor ? `c${i}-${sacudir}` : i}
+                        ref={esCursor ? cursorRef : undefined}
+                        className={clase}
+                      >
                         {ch}
                       </span>
                     );
@@ -345,7 +361,7 @@ export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar
       )}
 
       <p className="text-center text-sm text-slate-500 mt-4">
-        {estado === "listo" && "El tiempo empieza cuando escribes la primera letra. "}
+        {estado === "listo" && "El tiempo empieza cuando escribes la primera letra. Si te equivocas, escribe la letra correcta para avanzar. "}
         {estado !== "terminado" && (
           <>
             Pulsa <kbd className="px-1.5 py-0.5 bg-slate-200 rounded text-xs">Esc</kbd> para cambiar de texto.
@@ -398,7 +414,7 @@ function PanelResultado({ r, aviso, onOtraVez }: { r: Resultado; aviso: AvisoGua
         <Dato etiqueta="Precisión" valor={`${r.precision}%`} />
         <Dato etiqueta="Caracteres correctos" valor={r.correctos} />
         <Dato etiqueta="Errores cometidos" valor={r.errores} />
-        <Dato etiqueta="Velocidad bruta" valor={`${r.ppmBruta} ppm`} />
+        <Dato etiqueta="Teclas pulsadas" valor={r.pulsaciones} />
       </div>
 
       <p className="text-lg text-slate-700 mb-6">{mensaje}</p>
