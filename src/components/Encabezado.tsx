@@ -21,8 +21,12 @@ export default async function Encabezado() {
         ? [
             { href: "/", texto: "Practicar" },
             { href: "/progreso", texto: "Mi progreso" },
+            { href: "/tablero", texto: "Tablero" },
           ]
-        : [];
+        : [
+            { href: "/", texto: "Practicar" },
+            { href: "/tablero", texto: "Tablero" },
+          ];
 
   const iniciales = perfil ? `${perfil.nombres.charAt(0)}${perfil.apellidos.charAt(0)}`.toUpperCase() || "?" : "";
 

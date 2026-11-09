@@ -21,6 +21,7 @@ import {
 const AZUL = "#2a78d6";
 const POR_PAGINA = 50;
 
+type Pestana = "promedios" | "salon" | "todos";
 type Orden = "mejor" | "promedio" | "intentos" | "nombre" | "salon" | "ultima";
 
 interface FilaAlumno {
@@ -32,106 +33,31 @@ interface FilaAlumno {
   tendencia: number[];
 }
 
-export default function DashboardResultados({
-  salones,
-  alumnos,
-  intentos,
-  mediciones,
-  formulas: formulasIniciales,
-}: {
+interface Props {
   salones: SalonDash[];
   alumnos: AlumnoDash[];
   intentos: IntentoDash[];
   mediciones: { id: number; nombre: string }[];
   formulas: Formula[];
-}) {
-  // ── Filtros ──
+  /** admin: edita fórmulas, exporta y enlaza a las fichas. publico: solo lectura. */
+  modo: "admin" | "publico";
+}
+
+export default function DashboardResultados({ salones, alumnos, intentos, mediciones, formulas: formulasIniciales, modo }: Props) {
+  const esAdmin = modo === "admin";
+  const [pestana, setPestana] = useState<Pestana>("promedios");
+
+  // ── Filtros globales ──
   const [fuenteClave, setFuenteClave] = useState<string>(mediciones.length ? "med" : "todo");
   const [grado, setGrado] = useState("todos");
-  const [salonFiltro, setSalonFiltro] = useState("todos");
-  const [buscar, setBuscar] = useState("");
-  const [orden, setOrden] = useState<{ col: Orden; desc: boolean }>({ col: "mejor", desc: true });
-  const [mostrar, setMostrar] = useState(POR_PAGINA);
 
   // ── Fórmulas ──
   const [formulas, setFormulas] = useState(formulasIniciales);
   const [formulaId, setFormulaId] = useState<number | null>(formulasIniciales[0]?.id ?? null);
-  const [editor, setEditor] = useState(false);
   const formula = formulas.find((f) => f.id === formulaId) ?? formulas[0];
 
   const fuente: Fuente =
     fuenteClave === "todo" ? { tipo: "todo" } : fuenteClave === "practica" ? { tipo: "practica" } : { tipo: "mediciones", medicion: fuenteClave === "med" ? null : Number(fuenteClave) };
-
-  const grados = useMemo(() => Array.from(new Set(salones.map((s) => s.grado))), [salones]);
-  const salonesVisibles = salones.filter((s) => grado === "todos" || s.grado === grado);
-  const alumnosVisibles = alumnos.filter((a) => grado === "todos" || a.grado === grado);
-  const intentosFuente = useMemo(() => filtrarFuente(intentos, fuente), [intentos, fuenteClave]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Estadísticas por alumno ──
-  const filas: FilaAlumno[] = useMemo(() => {
-    const porAlumno = new Map<string, IntentoDash[]>();
-    for (const i of intentosFuente) porAlumno.set(i.a, [...(porAlumno.get(i.a) ?? []), i]);
-    return alumnosVisibles.map((a) => {
-      const lista = porAlumno.get(a.id) ?? [];
-      return {
-        alumno: a,
-        mejor: lista.length ? Math.max(...lista.map((i) => i.ppm)) : null,
-        promedio: promedio(lista.map((i) => i.ppm)),
-        intentos: lista.length,
-        ultima: lista.length ? lista[lista.length - 1].t : null,
-        tendencia: lista.slice(-10).map((i) => i.ppm),
-      };
-    });
-  }, [alumnosVisibles, intentosFuente]);
-
-  const conResultado = filas.filter((f) => f.mejor !== null);
-  const mejorAlumno = conResultado.reduce<FilaAlumno | null>((m, f) => (!m || f.mejor! > m.mejor! ? f : m), null);
-  const promedioColegio = promedio(conResultado.map((f) => f.mejor!));
-  const totalIntentos = filas.reduce((s, f) => s + f.intentos, 0);
-
-  // ── Ranking de salones con la fórmula ──
-  const ranking = useMemo(
-    () => (formula ? aplicarFormula(formula, salonesVisibles, alumnos, intentos).sort((a, b) => (b.promedio ?? -1) - (a.promedio ?? -1)) : []),
-    [formula, salonesVisibles, alumnos, intentos],
-  );
-  const maxRanking = Math.max(1, ...ranking.map((r) => r.promedio ?? 0));
-
-  // ── Por grado ──
-  const porGrado = grados
-    .filter((g) => grado === "todos" || g === grado)
-    .map((g) => {
-      const delGrado = filas.filter((f) => f.alumno.grado === g);
-      const con = delGrado.filter((f) => f.mejor !== null);
-      return { grado: g, alumnos: delGrado.length, con: con.length, promedio: promedio(con.map((f) => f.mejor!)), mejor: con.length ? Math.max(...con.map((f) => f.mejor!)) : null };
-    });
-  const maxGrado = Math.max(1, ...porGrado.map((g) => g.promedio ?? 0));
-
-  // ── Tabla de alumnos ──
-  const tabla = filas
-    .filter((f) => salonFiltro === "todos" || f.alumno.salon === salonFiltro)
-    .filter((f) => `${f.alumno.nombre} ${f.alumno.usuario}`.toLowerCase().includes(buscar.toLowerCase()))
-    .sort((a, b) => {
-      const dir = orden.desc ? -1 : 1;
-      const v = (f: FilaAlumno): number | string => {
-        switch (orden.col) {
-          case "nombre":
-            return f.alumno.nombre;
-          case "salon":
-            return f.alumno.gradoOrden * 1000 + (f.alumno.salonId ?? 0);
-          case "ultima":
-            return f.ultima ?? "";
-          default:
-            return f[orden.col] ?? -1;
-        }
-      };
-      const va = v(a);
-      const vb = v(b);
-      return (typeof va === "string" ? va.localeCompare(vb as string, "es") : va - (vb as number)) * dir;
-    });
-  const posicion = new Map([...conResultado].sort((a, b) => b.mejor! - a.mejor!).map((f, i) => [f.alumno.id, i + 1]));
-
-  const ordenarPor = (col: Orden) => setOrden((o) => ({ col, desc: o.col === col ? !o.desc : col !== "nombre" && col !== "salon" }));
-
   const nombreFuente =
     fuenteClave === "todo"
       ? "Práctica y mediciones"
@@ -141,9 +67,38 @@ export default function DashboardResultados({
           ? "Todas las mediciones"
           : (mediciones.find((m) => String(m.id) === fuenteClave)?.nombre ?? "");
 
+  const grados = useMemo(() => Array.from(new Set(salones.map((s) => s.grado))), [salones]);
+  const salonesVisibles = useMemo(() => salones.filter((s) => grado === "todos" || s.grado === grado), [salones, grado]);
+  const intentosFuente = useMemo(() => filtrarFuente(intentos, fuente), [intentos, fuenteClave]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Estadísticas de cada alumno (según la fuente elegida)
+  const filas: FilaAlumno[] = useMemo(() => {
+    const porAlumno = new Map<string, IntentoDash[]>();
+    for (const i of intentosFuente) porAlumno.set(i.a, [...(porAlumno.get(i.a) ?? []), i]);
+    return alumnos
+      .filter((a) => grado === "todos" || a.grado === grado)
+      .map((a) => {
+        const lista = porAlumno.get(a.id) ?? [];
+        return {
+          alumno: a,
+          mejor: lista.length ? Math.max(...lista.map((i) => i.ppm)) : null,
+          promedio: promedio(lista.map((i) => i.ppm)),
+          intentos: lista.length,
+          ultima: lista.length ? lista[lista.length - 1].t : null,
+          tendencia: lista.slice(-10).map((i) => i.ppm),
+        };
+      });
+  }, [alumnos, intentosFuente, grado]);
+
+  const ranking = useMemo(
+    () => (formula ? aplicarFormula(formula, salonesVisibles, alumnos, intentos).sort((a, b) => (b.promedio ?? -1) - (a.promedio ?? -1)) : []),
+    [formula, salonesVisibles, alumnos, intentos],
+  );
+
   const exportar = () => {
     const libro = XLSX.utils.book_new();
     const r = (n: number | null) => (n === null ? "" : Math.round(n * 10) / 10);
+    const ordenadas = [...filas].sort((a, b) => (b.mejor ?? -1) - (a.mejor ?? -1));
     XLSX.utils.book_append_sheet(
       libro,
       XLSX.utils.json_to_sheet(
@@ -158,20 +113,31 @@ export default function DashboardResultados({
           "Peor PPM": r(x.peor),
         })),
       ),
-      "Salones",
+      "Promedio de salones",
     );
-    XLSX.utils.book_append_sheet(
-      libro,
-      XLSX.utils.json_to_sheet(porGrado.map((g) => ({ Grado: g.grado, Promedio: r(g.promedio), "Alumnos con resultado": g.con, "Total alumnos": g.alumnos, "Mejor PPM": r(g.mejor) }))),
-      "Grados",
-    );
+    for (const s of salonesVisibles) {
+      const del = ordenadas.filter((f) => f.alumno.salonId === s.id);
+      XLSX.utils.book_append_sheet(
+        libro,
+        XLSX.utils.json_to_sheet(
+          del.map((f, i) => ({
+            Puesto: f.mejor === null ? "" : i + 1,
+            Alumno: f.alumno.nombre,
+            Usuario: f.alumno.usuario,
+            "Mejor PPM": r(f.mejor),
+            "Promedio PPM": r(f.promedio),
+            Intentos: f.intentos,
+          })),
+        ),
+        s.nombre.replace(/[\\/?*[\]:]/g, "").slice(0, 31),
+      );
+    }
     XLSX.utils.book_append_sheet(
       libro,
       XLSX.utils.json_to_sheet(
-        tabla.map((f) => ({
-          Puesto: posicion.get(f.alumno.id) ?? "",
+        ordenadas.map((f, i) => ({
+          Puesto: f.mejor === null ? "" : i + 1,
           Alumno: f.alumno.nombre,
-          Usuario: f.alumno.usuario,
           Salón: f.alumno.salon,
           "Mejor PPM": r(f.mejor),
           "Promedio PPM": r(f.promedio),
@@ -179,13 +145,13 @@ export default function DashboardResultados({
           "Última prueba": f.ultima ? fechaCorta.format(new Date(f.ultima)) : "",
         })),
       ),
-      "Alumnos",
+      "Todos los salones",
     );
     XLSX.utils.book_append_sheet(
       libro,
       XLSX.utils.aoa_to_sheet([
         ["Exportado", new Date().toLocaleString("es-PE")],
-        ["Datos de alumnos y grados", nombreFuente],
+        ["Datos de alumnos", nombreFuente],
         ["Fórmula de salones", formula ? `${formula.nombre}: ${describirFormula(formula)}` : ""],
         ["Grado", grado === "todos" ? "Todos" : grado],
       ]),
@@ -194,13 +160,19 @@ export default function DashboardResultados({
     XLSX.writeFile(libro, `resultados_typelake_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
+  const pestanas: { id: Pestana; texto: string }[] = [
+    { id: "promedios", texto: "Promedio de salones" },
+    { id: "salon", texto: "Por salón" },
+    { id: "todos", texto: "Todos los salones" },
+  ];
+
   return (
     <div className="space-y-6 animate-aparecer">
       {/* Encabezado + filtros en una sola fila */}
       <div className="flex flex-wrap items-end gap-3">
         <div className="mr-auto">
-          <h1 className="titulo-pagina">Resultados</h1>
-          <p className="subtitulo">Cada alumno cuenta con su mejor resultado válido.</p>
+          <h1 className="titulo-pagina">{esAdmin ? "Resultados" : "Tablero del concurso"}</h1>
+          <p className="subtitulo">Cada alumno cuenta con su mejor resultado válido, en palabras por minuto (ppm).</p>
         </div>
         <label className="text-sm">
           <span className="etiqueta">Datos de</span>
@@ -217,50 +189,118 @@ export default function DashboardResultados({
         </label>
         <label className="text-sm">
           <span className="etiqueta">Grado</span>
-          <select
-            className="campo w-48"
-            value={grado}
-            onChange={(e) => {
-              setGrado(e.target.value);
-              setSalonFiltro("todos");
-            }}
-          >
+          <select className="campo w-48" value={grado} onChange={(e) => setGrado(e.target.value)}>
             <option value="todos">Todos los grados</option>
             {grados.map((g) => (
               <option key={g}>{g}</option>
             ))}
           </select>
         </label>
-        <button className="btn btn-exito" onClick={exportar}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
-            <path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-          </svg>
-          Exportar a Excel
-        </button>
+        {esAdmin && (
+          <button className="btn btn-exito" onClick={exportar}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+              <path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+            </svg>
+            Exportar a Excel
+          </button>
+        )}
       </div>
 
-      {/* Indicadores */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Indicador titulo="Alumnos con resultado" valor={`${conResultado.length}`} nota={`de ${filas.length} alumnos`} />
-        <Indicador titulo="Promedio del colegio" valor={promedioColegio === null ? "—" : promedioColegio.toFixed(1)} unidad="ppm" nota="promedio de los mejores" />
-        <Indicador
-          titulo="Mejor resultado"
-          valor={mejorAlumno ? String(Math.round(mejorAlumno.mejor!)) : "—"}
-          unidad="ppm"
-          nota={mejorAlumno ? `${mejorAlumno.alumno.nombre.split(",")[1]?.trim().split(" ")[0]} ${mejorAlumno.alumno.nombre.split(" ")[0]} · ${mejorAlumno.alumno.salon}` : undefined}
+      {/* Pestañas */}
+      <div role="tablist" className="flex gap-1 rounded-2xl bg-white/70 border border-slate-200/70 p-1 w-fit max-w-full overflow-x-auto shadow-sm">
+        {pestanas.map((p) => (
+          <button
+            key={p.id}
+            role="tab"
+            aria-selected={pestana === p.id}
+            onClick={() => setPestana(p.id)}
+            className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-semibold transition ${
+              pestana === p.id ? "bg-lago-600 text-white shadow-sm" : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            {p.texto}
+          </button>
+        ))}
+      </div>
+
+      {pestana === "promedios" && (
+        <PestanaPromedios
+          esAdmin={esAdmin}
+          filas={filas}
+          ranking={ranking}
+          formulas={formulas}
+          formula={formula}
+          setFormulaId={setFormulaId}
+          setFormulas={setFormulas}
+          mediciones={mediciones}
+          grados={grados.filter((g) => grado === "todos" || g === grado)}
+          nombreFuente={nombreFuente}
         />
-        <Indicador titulo="Intentos" valor={String(totalIntentos)} nota={nombreFuente.toLowerCase()} />
+      )}
+      {pestana === "salon" && <PestanaSalon esAdmin={esAdmin} filas={filas} salones={salonesVisibles} nombreFuente={nombreFuente} ranking={ranking} formula={formula} />}
+      {pestana === "todos" && <PestanaTodos esAdmin={esAdmin} filas={filas} salones={salonesVisibles} nombreFuente={nombreFuente} />}
+    </div>
+  );
+}
+
+// ═══════════════════════ Pestaña 1: Promedio de salones ═══════════════════════
+
+function PestanaPromedios({
+  esAdmin,
+  filas,
+  ranking,
+  formulas,
+  formula,
+  setFormulaId,
+  setFormulas,
+  mediciones,
+  grados,
+  nombreFuente,
+}: {
+  esAdmin: boolean;
+  filas: FilaAlumno[];
+  ranking: ReturnType<typeof aplicarFormula>;
+  formulas: Formula[];
+  formula: Formula | undefined;
+  setFormulaId: (id: number) => void;
+  setFormulas: (f: Formula[]) => void;
+  mediciones: { id: number; nombre: string }[];
+  grados: string[];
+  nombreFuente: string;
+}) {
+  const [editor, setEditor] = useState(false);
+  const conResultado = filas.filter((f) => f.mejor !== null);
+  const mejor = conResultado.reduce<FilaAlumno | null>((m, f) => (!m || f.mejor! > m.mejor! ? f : m), null);
+  const promedioColegio = promedio(conResultado.map((f) => f.mejor!));
+  const maxRanking = Math.max(1, ...ranking.map((r) => r.promedio ?? 0));
+  const lider = ranking.find((r) => r.promedio !== null);
+
+  const porGrado = grados.map((g) => {
+    const delGrado = filas.filter((f) => f.alumno.grado === g);
+    const con = delGrado.filter((f) => f.mejor !== null);
+    return { grado: g, alumnos: delGrado.length, con: con.length, promedio: promedio(con.map((f) => f.mejor!)), mejor: con.length ? Math.max(...con.map((f) => f.mejor!)) : null };
+  });
+  const maxGrado = Math.max(1, ...porGrado.map((g) => g.promedio ?? 0));
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Indicador titulo="Salón líder" valor={lider?.salon.nombre ?? "—"} nota={lider ? `${lider.promedio?.toFixed(1)} ppm · ${formula?.nombre}` : undefined} chico />
+        <Indicador titulo="Promedio del colegio" valor={promedioColegio === null ? "—" : promedioColegio.toFixed(1)} unidad="ppm" nota={nombreFuente.toLowerCase()} />
+        <Indicador titulo="Mejor resultado" valor={mejor ? String(Math.round(mejor.mejor! * 10) / 10) : "—"} unidad="ppm" nota={mejor ? `${mejor.alumno.nombre} · ${mejor.alumno.salon}` : undefined} />
+        <Indicador titulo="Alumnos con resultado" valor={`${conResultado.length}`} nota={`de ${filas.length} alumnos`} />
       </div>
 
       <div className="grid lg:grid-cols-5 gap-6">
-        {/* Ranking de salones */}
         <section className="tarjeta p-6 lg:col-span-3">
           <div className="flex flex-wrap items-start gap-3">
             <div className="mr-auto">
               <h2 className="text-lg font-bold text-slate-900">Ranking de salones</h2>
-              <p className="text-sm text-slate-500">{formula ? describirFormula(formula, mediciones.find((m) => m.id === formula.medicion_id)?.nombre) : "Crea una fórmula para comparar salones."}</p>
+              <p className="text-sm text-slate-500">
+                {formula ? describirFormula(formula, mediciones.find((m) => m.id === formula.medicion_id)?.nombre) : "Todavía no hay fórmulas publicadas."}
+              </p>
             </div>
-            {formulas.length > 0 && (
+            {formulas.length > 1 && (
               <select className="campo w-auto" value={formula?.id ?? ""} onChange={(e) => setFormulaId(Number(e.target.value))}>
                 {formulas.map((f) => (
                   <option key={f.id} value={f.id}>
@@ -269,17 +309,17 @@ export default function DashboardResultados({
                 ))}
               </select>
             )}
-            <button className={`btn ${editor ? "btn-primario" : "btn-secundario"}`} onClick={() => setEditor((e) => !e)}>
-              {editor ? "Cerrar fórmulas" : "Gestionar fórmulas"}
-            </button>
+            {esAdmin && (
+              <button className={`btn ${editor ? "btn-primario" : "btn-secundario"}`} onClick={() => setEditor((e) => !e)}>
+                {editor ? "Cerrar fórmulas" : "Gestionar fórmulas"}
+              </button>
+            )}
           </div>
 
           <ol className="mt-5 space-y-2">
             {ranking.map((r, i) => (
               <li key={r.salon.id} className="flex items-center gap-3 text-sm" title={`${r.salon.nombre}: ${r.considerados} alumnos considerados de ${r.alumnos}`}>
-                <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg text-xs font-bold ${i < 3 && r.promedio !== null ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"}`}>
-                  {r.promedio === null ? "–" : i + 1}
-                </span>
+                <Medalla puesto={r.promedio === null ? null : i + 1} />
                 <span className="w-40 shrink-0 truncate font-medium text-slate-800">{r.salon.nombre}</span>
                 <span className="flex-1 h-5 rounded bg-slate-100 overflow-hidden">
                   <span className="block h-full rounded-r transition-[width] duration-500" style={{ width: `${((r.promedio ?? 0) / maxRanking) * 100}%`, background: AZUL }} />
@@ -291,17 +331,9 @@ export default function DashboardResultados({
               </li>
             ))}
           </ol>
-          {editor && (
-            <EditorFormulas
-              formulas={formulas}
-              mediciones={mediciones}
-              onCambio={setFormulas}
-              onElegir={(id) => setFormulaId(id)}
-            />
-          )}
+          {esAdmin && editor && <EditorFormulas formulas={formulas} mediciones={mediciones} onCambio={setFormulas} onElegir={setFormulaId} />}
         </section>
 
-        {/* Por grado */}
         <section className="tarjeta p-6 lg:col-span-2">
           <h2 className="text-lg font-bold text-slate-900">Promedio por grado</h2>
           <p className="text-sm text-slate-500 mb-5">{nombreFuente} · promedio del mejor resultado de cada alumno</p>
@@ -323,19 +355,191 @@ export default function DashboardResultados({
           </ul>
         </section>
       </div>
+    </div>
+  );
+}
 
-      {/* Alumnos */}
+// ═══════════════════════ Pestaña 2: Por salón ═══════════════════════
+
+function PestanaSalon({
+  esAdmin,
+  filas,
+  salones,
+  nombreFuente,
+  ranking,
+  formula,
+}: {
+  esAdmin: boolean;
+  filas: FilaAlumno[];
+  salones: SalonDash[];
+  nombreFuente: string;
+  ranking: ReturnType<typeof aplicarFormula>;
+  formula: Formula | undefined;
+}) {
+  const [salonId, setSalonId] = useState<number | null>(salones[0]?.id ?? null);
+  const salon = salones.find((s) => s.id === salonId) ?? salones[0];
+  if (!salon) return <p className="tarjeta p-6 text-sm text-slate-500">No hay salones para este filtro.</p>;
+
+  const del = filas.filter((f) => f.alumno.salonId === salon.id).sort((a, b) => (b.mejor ?? -1) - (a.mejor ?? -1));
+  const con = del.filter((f) => f.mejor !== null);
+  const sin = del.filter((f) => f.mejor === null);
+  const max = Math.max(1, ...con.map((f) => f.mejor!));
+  const promedioSalon = promedio(con.map((f) => f.mejor!));
+  const enRanking = ranking.filter((r) => r.promedio !== null);
+  const puesto = enRanking.findIndex((r) => r.salon.id === salon.id);
+  const resultadoFormula = ranking.find((r) => r.salon.id === salon.id);
+  const totalIntentos = del.reduce((s, f) => s + f.intentos, 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap gap-2">
+        {salones.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => setSalonId(s.id)}
+            className={`rounded-xl border px-4 py-2 text-sm font-semibold transition ${
+              s.id === salon.id ? "border-lago-600 bg-lago-600 text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-lago-300"
+            }`}
+          >
+            {s.nombre}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Indicador
+          titulo={formula ? `Promedio (${formula.nombre})` : "Promedio del salón"}
+          valor={resultadoFormula?.promedio === null || !resultadoFormula ? "—" : resultadoFormula.promedio.toFixed(1)}
+          unidad="ppm"
+          nota={puesto >= 0 ? `puesto ${puesto + 1} de ${enRanking.length} salones` : undefined}
+        />
+        <Indicador titulo="Promedio simple" valor={promedioSalon === null ? "—" : promedioSalon.toFixed(1)} unidad="ppm" nota={nombreFuente.toLowerCase()} />
+        <Indicador titulo="Mejor del salón" valor={con.length ? String(Math.round(con[0].mejor! * 10) / 10) : "—"} unidad="ppm" nota={con[0]?.alumno.nombre} />
+        <Indicador titulo="Alumnos con resultado" valor={`${con.length}`} nota={`de ${del.length} · ${totalIntentos} intentos`} />
+      </div>
+
+      <section className="tarjeta p-6">
+        <h2 className="text-lg font-bold text-slate-900">{salon.nombre}</h2>
+        <p className="text-sm text-slate-500 mb-5">Mejor resultado de cada alumno · {nombreFuente}</p>
+        {con.length === 0 ? (
+          <p className="text-sm text-slate-500 bg-slate-50 rounded-xl px-4 py-8 text-center">Este salón todavía no tiene resultados con este filtro.</p>
+        ) : (
+          <ol className="space-y-1.5">
+            {con.map((f, i) => (
+              <li key={f.alumno.id} className="flex items-center gap-3 text-sm">
+                <Medalla puesto={i + 1} />
+                <span className="w-52 shrink-0 truncate text-slate-800">
+                  <NombreAlumno f={f} esAdmin={esAdmin} />
+                </span>
+                <span className="flex-1 h-4 rounded bg-slate-100 overflow-hidden">
+                  <span className="block h-full rounded-r transition-[width] duration-500" style={{ width: `${(f.mejor! / max) * 100}%`, background: AZUL }} />
+                </span>
+                <span className="w-12 shrink-0 text-right font-bold tabular-nums text-slate-900">{Math.round(f.mejor! * 10) / 10}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+        {sin.length > 0 && (
+          <p className="text-xs text-slate-400 mt-4">
+            Sin resultado ({sin.length}): {sin.map((f) => f.alumno.nombre).join(" · ")}
+          </p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+// ═══════════════════════ Pestaña 3: Todos los salones ═══════════════════════
+
+function PestanaTodos({ esAdmin, filas, salones, nombreFuente }: { esAdmin: boolean; filas: FilaAlumno[]; salones: SalonDash[]; nombreFuente: string }) {
+  const [salonFiltro, setSalonFiltro] = useState("todos");
+  const [buscar, setBuscar] = useState("");
+  const [top, setTop] = useState(20);
+  const [orden, setOrden] = useState<{ col: Orden; desc: boolean }>({ col: "mejor", desc: true });
+  const [mostrar, setMostrar] = useState(POR_PAGINA);
+
+  const conResultado = filas.filter((f) => f.mejor !== null).sort((a, b) => b.mejor! - a.mejor!);
+  const posicion = new Map(conResultado.map((f, i) => [f.alumno.id, i + 1]));
+  const destacados = top ? conResultado.slice(0, top) : conResultado;
+  const max = Math.max(1, ...destacados.map((f) => f.mejor!));
+
+  const tabla = filas
+    .filter((f) => salonFiltro === "todos" || f.alumno.salon === salonFiltro)
+    .filter((f) => f.alumno.nombre.toLowerCase().includes(buscar.toLowerCase()))
+    .sort((a, b) => {
+      const dir = orden.desc ? -1 : 1;
+      const v = (f: FilaAlumno): number | string => {
+        switch (orden.col) {
+          case "nombre":
+            return f.alumno.nombre;
+          case "salon":
+            return f.alumno.gradoOrden * 1000 + (f.alumno.salonId ?? 0);
+          case "ultima":
+            return f.ultima ?? "";
+          default:
+            return f[orden.col] ?? -1;
+        }
+      };
+      const va = v(a);
+      const vb = v(b);
+      return (typeof va === "string" ? va.localeCompare(vb as string, "es") : va - (vb as number)) * dir;
+    });
+  const ordenarPor = (col: Orden) => setOrden((o) => ({ col, desc: o.col === col ? !o.desc : col !== "nombre" && col !== "salon" }));
+
+  return (
+    <div className="space-y-6">
+      <section className="tarjeta p-6">
+        <div className="flex flex-wrap items-start gap-3 mb-5">
+          <div className="mr-auto">
+            <h2 className="text-lg font-bold text-slate-900">Los mejores del colegio</h2>
+            <p className="text-sm text-slate-500">Todos los salones juntos · {nombreFuente}</p>
+          </div>
+          <div className="inline-flex rounded-xl bg-slate-100 p-1 text-sm">
+            {[10, 20, 50, 0].map((n) => (
+              <button
+                key={n}
+                onClick={() => setTop(n)}
+                className={`rounded-lg px-3 py-1 transition ${top === n ? "bg-white shadow-sm font-semibold text-slate-900" : "text-slate-500 hover:text-slate-800"}`}
+              >
+                {n ? `Top ${n}` : "Todos"}
+              </button>
+            ))}
+          </div>
+        </div>
+        {destacados.length === 0 ? (
+          <p className="text-sm text-slate-500 bg-slate-50 rounded-xl px-4 py-8 text-center">Todavía no hay resultados con este filtro.</p>
+        ) : (
+          <ol className="space-y-1.5">
+            {destacados.map((f, i) => (
+              <li key={f.alumno.id} className="flex items-center gap-3 text-sm">
+                <Medalla puesto={i + 1} />
+                <span className="w-48 shrink-0 truncate text-slate-800">
+                  <NombreAlumno f={f} esAdmin={esAdmin} />
+                </span>
+                <span className="hidden sm:inline-flex w-36 shrink-0">
+                  <span className="chip">{f.alumno.salon}</span>
+                </span>
+                <span className="flex-1 h-4 rounded bg-slate-100 overflow-hidden">
+                  <span className="block h-full rounded-r transition-[width] duration-500" style={{ width: `${(f.mejor! / max) * 100}%`, background: AZUL }} />
+                </span>
+                <span className="w-12 shrink-0 text-right font-bold tabular-nums text-slate-900">{Math.round(f.mejor! * 10) / 10}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
+
       <section className="tarjeta p-6">
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <div className="mr-auto">
-            <h2 className="text-lg font-bold text-slate-900">Alumnos</h2>
+            <h2 className="text-lg font-bold text-slate-900">Tabla completa</h2>
             <p className="text-sm text-slate-500">
-              {nombreFuente} · {tabla.length} alumnos · haz clic en un nombre para ver su ficha
+              {tabla.length} alumnos{esAdmin && " · haz clic en un nombre para ver su ficha"}
             </p>
           </div>
           <select className="campo w-auto" value={salonFiltro} onChange={(e) => setSalonFiltro(e.target.value)}>
             <option value="todos">Todos los salones</option>
-            {salonesVisibles.map((s) => (
+            {salones.map((s) => (
               <option key={s.id}>{s.nombre}</option>
             ))}
           </select>
@@ -372,10 +576,8 @@ export default function DashboardResultados({
               {tabla.slice(0, mostrar).map((f) => (
                 <tr key={f.alumno.id} className="border-b border-slate-50 hover:bg-lago-50/40 transition">
                   <td className="py-2 pl-6 pr-2 tabular-nums text-slate-400">{posicion.get(f.alumno.id) ?? "–"}</td>
-                  <td className="py-2 pr-3">
-                    <Link href={`/admin/alumnos/${f.alumno.id}`} className="font-medium text-slate-800 hover:text-lago-700 hover:underline">
-                      {f.alumno.nombre}
-                    </Link>
+                  <td className="py-2 pr-3 font-medium text-slate-800">
+                    <NombreAlumno f={f} esAdmin={esAdmin} />
                   </td>
                   <td className="py-2 pr-3 whitespace-nowrap">
                     <span className="chip">{f.alumno.salon}</span>
@@ -404,11 +606,28 @@ export default function DashboardResultados({
   );
 }
 
-function Indicador({ titulo, valor, unidad, nota }: { titulo: string; valor: string; unidad?: string; nota?: string }) {
+// ═══════════════════════ Piezas ═══════════════════════
+
+function NombreAlumno({ f, esAdmin }: { f: FilaAlumno; esAdmin: boolean }) {
+  if (!esAdmin) return <>{f.alumno.nombre}</>;
+  return (
+    <Link href={`/admin/alumnos/${f.alumno.id}`} className="hover:text-lago-700 hover:underline">
+      {f.alumno.nombre}
+    </Link>
+  );
+}
+
+function Medalla({ puesto }: { puesto: number | null }) {
+  const estilo =
+    puesto === 1 ? "bg-amber-100 text-amber-700" : puesto === 2 ? "bg-slate-200 text-slate-700" : puesto === 3 ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-500";
+  return <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg text-xs font-bold tabular-nums ${estilo}`}>{puesto ?? "–"}</span>;
+}
+
+function Indicador({ titulo, valor, unidad, nota, chico }: { titulo: string; valor: string; unidad?: string; nota?: string; chico?: boolean }) {
   return (
     <div className="tarjeta p-5">
-      <div className="text-sm text-slate-500">{titulo}</div>
-      <div className="mt-1 text-3xl font-extrabold text-slate-900">
+      <div className="text-sm text-slate-500 truncate">{titulo}</div>
+      <div className={`mt-1 font-extrabold text-slate-900 truncate ${chico ? "text-2xl" : "text-3xl"}`}>
         {valor}
         {unidad && valor !== "—" && <span className="ml-1 text-base font-medium text-slate-500">{unidad}</span>}
       </div>
