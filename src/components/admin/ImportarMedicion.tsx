@@ -39,7 +39,7 @@ export default function ImportarMedicion() {
 
   const notasDe = (h: HojaMedicion) => {
     const g = h.grupos.find((x) => x.clave === grupo);
-    return h.alumnos.map((a) => ({
+    return h.alumnos.filter((a) => !a.incompleto).map((a) => ({
       nombres: a.nombres,
       apellidos: a.apellidos,
       notas: g ? g.columnas.map((c) => a.valores[c]).filter((v): v is number => v !== null) : [],
@@ -165,7 +165,8 @@ export default function ImportarMedicion() {
                   <th className="py-2 pr-3 font-medium">Sección</th>
                   <th className="py-2 pr-3 font-medium text-right">Alumnos</th>
                   <th className="py-2 pr-3 font-medium text-right">Con nota</th>
-                  <th className="py-2 font-medium text-right">Sin nota</th>
+                  <th className="py-2 pr-3 font-medium text-right">Sin nota</th>
+                  <th className="py-2 font-medium text-right">Nombre incompleto</th>
                 </tr>
               </thead>
               <tbody>
@@ -173,6 +174,7 @@ export default function ImportarMedicion() {
                   const cfg = config[h.hoja];
                   const notas = notasDe(h);
                   const con = notas.filter((a) => a.notas.length).length;
+                  const incompletos = h.alumnos.filter((a) => a.incompleto).length;
                   return (
                     <tr key={h.hoja} className={`border-b border-slate-50 ${cfg?.incluir ? "" : "opacity-40"}`}>
                       <td className="py-2 pr-3">
@@ -189,13 +191,36 @@ export default function ImportarMedicion() {
                       </td>
                       <td className="py-2 pr-3 text-right tabular-nums">{h.alumnos.length}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{con}</td>
-                      <td className="py-2 text-right tabular-nums text-slate-500">{h.alumnos.length - con}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-slate-500">{notas.length - con}</td>
+                      <td className={`py-2 text-right tabular-nums ${incompletos ? "text-amber-700 font-semibold" : "text-slate-400"}`}>{incompletos}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
+
+          {hojas.some((h) => h.alumnos.some((a) => a.incompleto)) && (
+            <div className="text-sm bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-4 py-3">
+              <p className="font-medium mb-1">Algunos alumnos no tienen apellidos y no se importarán:</p>
+              <ul className="list-disc pl-5 space-y-0.5">
+                {hojas
+                  .filter((h) => h.alumnos.some((a) => a.incompleto))
+                  .map((h) => {
+                    const lista = h.alumnos.filter((a) => a.incompleto).map((a) => a.original);
+                    return (
+                      <li key={h.hoja}>
+                        <b>{h.hoja}</b>: {lista.slice(0, 6).join(", ")}
+                        {lista.length > 6 && ` y ${lista.length - 6} más`}
+                      </li>
+                    );
+                  })}
+              </ul>
+              <p className="mt-1">
+                Corrige esos nombres en el Excel como <b>&quot;APELLIDOS, NOMBRES&quot;</b> y vuelve a importar; las notas ya importadas se reemplazan sin duplicarse.
+              </p>
+            </div>
+          )}
 
           <button
             onClick={importar}

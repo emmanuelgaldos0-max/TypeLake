@@ -18,6 +18,8 @@ export interface GrupoMedicion {
 export interface AlumnoHoja {
   apellidos: string;
   nombres: string;
+  original: string; // como estaba escrito en el Excel
+  incompleto: boolean; // sin apellidos: no se puede crear una cuenta confiable
   valores: Record<number, number | null>; // columna → PPM
 }
 
@@ -27,6 +29,9 @@ export interface HojaMedicion {
   grupos: GrupoMedicion[];
   alumnos: AlumnoHoja[];
 }
+
+const esWpm = (v: unknown) => /^(wpm|ppm)/.test(norm(v));
+const ENCABEZADOS_NOMBRE = ["nombres", "nombre", "apellidos y nombres", "nombres y apellidos", "alumno", "alumnos", "estudiante"];
 
 const norm = (v: unknown) =>
   String(v ?? "")
@@ -52,17 +57,24 @@ function propio(texto: string) {
 
 export function leerNota(v: unknown): number | null {
   if (typeof v === "number") return Number.isFinite(v) ? v : null;
-  const t = String(v ?? "").trim().replace(",", ".");
+  // Quita espacios y tildes/apóstrofos sueltos ("´6.6" → 6.6); acepta coma decimal
+  const t = String(v ?? "").replace(/[\s´'`’]/g, "").replace(",", ".");
   return /^\d+(\.\d+)?$/.test(t) ? Number(t) : null;
 }
 
-function separarNombre(completo: string) {
-  const limpio = completo.replace(/\s+/g, " ").trim();
+function separarNombre(completo: string): Pick<AlumnoHoja, "apellidos" | "nombres" | "incompleto"> {
+  // Quita numeración al inicio: "1. Aldair", "12) Pérez…"
+  const limpio = completo.replace(/^\s*\d+\s*[.)\-–]?\s*/, "").replace(/\s+/g, " ").trim();
   const coma = limpio.indexOf(",");
-  if (coma >= 0) return { apellidos: propio(limpio.slice(0, coma)), nombres: propio(limpio.slice(coma + 1)) };
-  // Sin coma: se asume "APELLIDO1 APELLIDO2 NOMBRES"
+  if (coma >= 0) {
+    const apellidos = propio(limpio.slice(0, coma));
+    const nombres = propio(limpio.slice(coma + 1));
+    return { apellidos, nombres, incompleto: !apellidos || !nombres };
+  }
+  // Sin coma: se asume "APELLIDO1 APELLIDO2 NOMBRES"; con menos de 3 palabras no se puede saber
   const partes = limpio.split(" ");
-  return { apellidos: propio(partes.slice(0, 2).join(" ")), nombres: propio(partes.slice(2).join(" ")) };
+  if (partes.length < 3) return { apellidos: "", nombres: propio(limpio), incompleto: true };
+  return { apellidos: propio(partes.slice(0, 2).join(" ")), nombres: propio(partes.slice(2).join(" ")), incompleto: false };
 }
 
 export function sugerirGrado(hoja: string) {
@@ -76,25 +88,35 @@ export function leerLibroMediciones(libro: XLSX.WorkBook): HojaMedicion[] {
   for (const nombreHoja of libro.SheetNames) {
     const filas = XLSX.utils.sheet_to_json<unknown[]>(libro.Sheets[nombreHoja], { header: 1, defval: "", raw: true });
 
-    // 1. Fila de encabezado: la que tiene "Nombres"
-    let filaEnc = -1;
+    // 1. Fila con las columnas "WPM 1", "WPM 2"…
+    let filaWpm = -1;
+    for (let r = 0; r < Math.min(filas.length, 30) && filaWpm < 0; r++) {
+      if ((filas[r] ?? []).some(esWpm)) filaWpm = r;
+    }
+    if (filaWpm < 0) continue;
+    const enc = filas[filaWpm] ?? [];
+    const primeraWpm = enc.findIndex(esWpm);
+
+    // 2. Columna de nombres: el encabezado "Nombres" (en esa fila o en las de arriba)…
     let colNombre = -1;
-    for (let r = 0; r < Math.min(filas.length, 30) && filaEnc < 0; r++) {
-      const c = (filas[r] ?? []).findIndex((v) => ["nombres", "nombre", "apellidos y nombres", "nombres y apellidos"].includes(norm(v)));
-      if (c >= 0) {
-        filaEnc = r;
-        colNombre = c;
+    for (let r = filaWpm; r >= Math.max(0, filaWpm - 3) && colNombre < 0; r--) {
+      colNombre = (filas[r] ?? []).findIndex((v, c) => c < primeraWpm && ENCABEZADOS_NOMBRE.includes(norm(v)));
+    }
+    // …o, si no hay encabezado, la columna con texto más cercana a la izquierda de los WPM
+    if (colNombre < 0) {
+      for (let c = primeraWpm - 1; c >= 0 && colNombre < 0; c--) {
+        const conTexto = filas.slice(filaWpm + 1, filaWpm + 15).filter((f) => /[a-zA-ZÁÉÍÓÚÑáéíóúñ]/.test(String(f?.[c] ?? ""))).length;
+        if (conTexto >= 3) colNombre = c;
       }
     }
-    if (filaEnc < 0) continue;
+    if (colNombre < 0) continue;
 
-    // 2. Columnas de PPM y su medición (buscando a la izquierda en las filas de arriba)
-    const enc = filas[filaEnc] ?? [];
+    // 3. Columnas de PPM y su medición (buscando a la izquierda en las filas de arriba)
     const grupos: GrupoMedicion[] = [];
     enc.forEach((v, c) => {
-      if (c <= colNombre || !/^(wpm|ppm)/.test(norm(v))) return;
+      if (c <= colNombre || !esWpm(v)) return;
       let etiqueta = "";
-      for (let r = filaEnc - 1; r >= Math.max(0, filaEnc - 3) && !etiqueta; r--) {
+      for (let r = filaWpm - 1; r >= Math.max(0, filaWpm - 3) && !etiqueta; r--) {
         for (let k = c; k > colNombre; k--) {
           const t = String(filas[r]?.[k] ?? "").trim();
           if (t) {
@@ -111,10 +133,10 @@ export function leerLibroMediciones(libro: XLSX.WorkBook): HojaMedicion[] {
     });
     if (!grupos.length) continue;
 
-    // 3. Alumnos (se detiene tras varias filas seguidas sin nombre)
+    // 4. Alumnos (se detiene tras varias filas seguidas sin nombre)
     const alumnos: AlumnoHoja[] = [];
     let vacias = 0;
-    for (let r = filaEnc + 1; r < filas.length && vacias < 5; r++) {
+    for (let r = filaWpm + 1; r < filas.length && vacias < 5; r++) {
       const nombre = String(filas[r]?.[colNombre] ?? "").trim();
       if (!/[a-zA-ZÁÉÍÓÚÑáéíóúñ]/.test(nombre)) {
         vacias++;
@@ -123,7 +145,7 @@ export function leerLibroMediciones(libro: XLSX.WorkBook): HojaMedicion[] {
       vacias = 0;
       const valores: Record<number, number | null> = {};
       for (const g of grupos) for (const c of g.columnas) valores[c] = leerNota(filas[r]?.[c]);
-      alumnos.push({ ...separarNombre(nombre), valores });
+      alumnos.push({ ...separarNombre(nombre), original: nombre, valores });
     }
 
     hojas.push({ hoja: nombreHoja, gradoSugerido: sugerirGrado(nombreHoja), grupos, alumnos });
