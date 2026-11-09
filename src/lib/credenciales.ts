@@ -19,6 +19,15 @@ export function normalizar(texto: string) {
     .replace(/[^a-z]/g, "");
 }
 
+/** Clave para comparar nombres de grado: conserva los números ("1° de secundaria" ≠ "2° de secundaria"). */
+export function claveGrado(texto: string) {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
 /** Usuario base: inicial del nombre + primer apellido + inicial del segundo (Juan Pérez García → jperezg). */
 export function usuarioBase(nombres: string, apellidos: string) {
   const [n1 = ""] = nombres.trim().split(/\s+/);

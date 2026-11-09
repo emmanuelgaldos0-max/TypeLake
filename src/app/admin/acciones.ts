@@ -4,7 +4,7 @@ import { randomInt } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { crearClienteAdmin, emailDeUsuario, obtenerSesion } from "@/lib/supabase/server";
-import { generarClave, normalizar, ordenDeGrado, usuarioBase } from "@/lib/credenciales";
+import { claveGrado, generarClave, normalizar, ordenDeGrado, usuarioBase } from "@/lib/credenciales";
 
 export interface FilaAlumno {
   grado: string;
@@ -38,7 +38,7 @@ async function contextoAlumnos(db: SupabaseClient) {
   const anio = cfg!.anio_escolar as number;
 
   const { data: grados } = await db.from("grados").select("id, nombre");
-  const gradoPorNombre = new Map((grados ?? []).map((g) => [normalizar(g.nombre), g.id as number]));
+  const gradoPorNombre = new Map((grados ?? []).map((g) => [claveGrado(g.nombre), g.id as number]));
   const { data: salones } = await db.from("salones").select("id, grado_id, seccion").eq("anio", anio);
   const salonPorClave = new Map((salones ?? []).map((s) => [`${s.grado_id}|${s.seccion.toUpperCase()}`, s.id as number]));
 
@@ -47,13 +47,13 @@ async function contextoAlumnos(db: SupabaseClient) {
   const alumnoPorClave = new Map((perfiles ?? []).map((p) => [claveAlumno(p.nombres, p.apellidos, p.salon_id), p.id as string]));
 
   const salonId = async (grado: string, seccion: string) => {
-    const claveGrado = normalizar(grado);
-    let gradoId = gradoPorNombre.get(claveGrado);
+    const clave = claveGrado(grado);
+    let gradoId = gradoPorNombre.get(clave);
     if (!gradoId) {
       const { data, error } = await db.from("grados").insert({ nombre: grado, orden: ordenDeGrado(grado) }).select("id").single();
       if (error) throw new Error(`No se pudo crear el grado "${grado}": ${error.message}`);
       gradoId = data.id as number;
-      gradoPorNombre.set(claveGrado, gradoId);
+      gradoPorNombre.set(clave, gradoId);
     }
     const claveSalon = `${gradoId}|${seccion.toUpperCase()}`;
     let id = salonPorClave.get(claveSalon);
