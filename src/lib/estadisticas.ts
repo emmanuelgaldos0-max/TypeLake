@@ -34,6 +34,18 @@ export interface IntentoDash {
   t: string; // fecha ISO
 }
 
+/** Alumno al que se le intentó evaluar en una medición pero decidió no dar su evaluación. */
+export interface EvaluadoSinNota {
+  a: string; // alumno
+  med: number; // medición
+}
+
+/** Alumnos que, para la fuente dada, fueron evaluados pero no tienen nota. */
+export function evaluadosSinNota(sinNota: EvaluadoSinNota[], f: Fuente) {
+  if (f.tipo === "practica") return new Set<string>();
+  return new Set(sinNota.filter((e) => f.tipo === "todo" || f.medicion === null || e.med === f.medicion).map((e) => e.a));
+}
+
 export interface SalonDash {
   id: number;
   nombre: string;
@@ -75,14 +87,22 @@ export interface ResultadoSalon {
 }
 
 /** Aplica una fórmula a cada salón (1 puntaje por alumno: su mejor intento). */
-export function aplicarFormula(f: Formula, salones: SalonDash[], alumnos: AlumnoDash[], intentos: IntentoDash[]): ResultadoSalon[] {
+export function aplicarFormula(
+  f: Formula,
+  salones: SalonDash[],
+  alumnos: AlumnoDash[],
+  intentos: IntentoDash[],
+  sinNota: EvaluadoSinNota[] = [],
+): ResultadoSalon[] {
   const fuente: Fuente = f.fuente === "todo" ? { tipo: "todo" } : { tipo: "mediciones", medicion: f.medicion_id };
   const mejores = mejoresPorAlumno(filtrarFuente(intentos, fuente));
+  // Quien decidió no dar su evaluación no tiene puntaje: nunca cuenta como 0
+  const declinaron = evaluadosSinNota(sinNota, fuente);
 
   return salones.map((s) => {
     const delSalon = alumnos.filter((a) => a.salonId === s.id);
     const puntajes = delSalon
-      .map((a) => mejores.get(a.id) ?? (f.sin_intentos === "cero" ? 0 : null))
+      .map((a) => mejores.get(a.id) ?? (f.sin_intentos === "cero" && !declinaron.has(a.id) ? 0 : null))
       .filter((v): v is number => v !== null);
     const conPuntaje = delSalon.filter((a) => mejores.has(a.id)).length;
 
@@ -119,7 +139,7 @@ export function describirFormula(f: Pick<Formula, "tipo" | "mejores" | "peores" 
           ? `Promedio de los ${f.mejores ?? 10} mejores`
           : `Promedio de los ${f.mejores ?? 0} mejores + ${f.peores ?? 0} peores`;
   const datos = f.fuente === "todo" ? "práctica y mediciones" : nombreMedicion ? `solo "${nombreMedicion}"` : "solo mediciones";
-  const faltan = f.sin_intentos === "cero" ? "sin nota cuenta como 0" : "sin nota no cuenta";
+  const faltan = f.sin_intentos === "cero" ? "sin evaluar cuenta como 0" : "sin nota no cuenta";
   return `${metodo} · ${datos} · ${faltan}`;
 }
 

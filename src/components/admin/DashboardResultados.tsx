@@ -8,10 +8,12 @@ import Sparkline from "@/components/admin/Sparkline";
 import {
   aplicarFormula,
   describirFormula,
+  evaluadosSinNota,
   fechaCorta,
   filtrarFuente,
   promedio,
   type AlumnoDash,
+  type EvaluadoSinNota,
   type Formula,
   type Fuente,
   type IntentoDash,
@@ -31,19 +33,22 @@ interface FilaAlumno {
   intentos: number;
   ultima: string | null;
   tendencia: number[];
+  /** Evaluado en la fuente elegida, pero decidió no dar su evaluación. */
+  evaluadoSinNota: boolean;
 }
 
 interface Props {
   salones: SalonDash[];
   alumnos: AlumnoDash[];
   intentos: IntentoDash[];
+  sinNota: EvaluadoSinNota[];
   mediciones: { id: number; nombre: string }[];
   formulas: Formula[];
   /** admin: edita fórmulas, exporta y enlaza a las fichas. publico: solo lectura. */
   modo: "admin" | "publico";
 }
 
-export default function DashboardResultados({ salones, alumnos, intentos, mediciones, formulas: formulasIniciales, modo }: Props) {
+export default function DashboardResultados({ salones, alumnos, intentos, sinNota, mediciones, formulas: formulasIniciales, modo }: Props) {
   const esAdmin = modo === "admin";
   const [pestana, setPestana] = useState<Pestana>("promedios");
 
@@ -70,6 +75,7 @@ export default function DashboardResultados({ salones, alumnos, intentos, medici
   const grados = useMemo(() => Array.from(new Set(salones.map((s) => s.grado))), [salones]);
   const salonesVisibles = useMemo(() => salones.filter((s) => grado === "todos" || s.grado === grado), [salones, grado]);
   const intentosFuente = useMemo(() => filtrarFuente(intentos, fuente), [intentos, fuenteClave]); // eslint-disable-line react-hooks/exhaustive-deps
+  const declinaron = useMemo(() => evaluadosSinNota(sinNota, fuente), [sinNota, fuenteClave]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Estadísticas de cada alumno (según la fuente elegida)
   const filas: FilaAlumno[] = useMemo(() => {
@@ -86,13 +92,14 @@ export default function DashboardResultados({ salones, alumnos, intentos, medici
           intentos: lista.length,
           ultima: lista.length ? lista[lista.length - 1].t : null,
           tendencia: lista.slice(-10).map((i) => i.ppm),
+          evaluadoSinNota: !lista.length && declinaron.has(a.id),
         };
       });
-  }, [alumnos, intentosFuente, grado]);
+  }, [alumnos, intentosFuente, declinaron, grado]);
 
   const ranking = useMemo(
-    () => (formula ? aplicarFormula(formula, salonesVisibles, alumnos, intentos).sort((a, b) => (b.promedio ?? -1) - (a.promedio ?? -1)) : []),
-    [formula, salonesVisibles, alumnos, intentos],
+    () => (formula ? aplicarFormula(formula, salonesVisibles, alumnos, intentos, sinNota).sort((a, b) => (b.promedio ?? -1) - (a.promedio ?? -1)) : []),
+    [formula, salonesVisibles, alumnos, intentos, sinNota],
   );
 
   const exportar = () => {
@@ -127,6 +134,7 @@ export default function DashboardResultados({ salones, alumnos, intentos, medici
             "Mejor PPM": r(f.mejor),
             "Promedio PPM": r(f.promedio),
             Intentos: f.intentos,
+            Observación: f.mejor !== null ? "" : f.evaluadoSinNota ? "Evaluado sin nota" : "Sin evaluar",
           })),
         ),
         s.nombre.replace(/[\\/?*[\]:]/g, "").slice(0, 31),
@@ -288,7 +296,13 @@ function PestanaPromedios({
         <Indicador titulo="Salón líder" valor={lider?.salon.nombre ?? "—"} nota={lider ? `${lider.promedio?.toFixed(1)} ppm · ${formula?.nombre}` : undefined} chico />
         <Indicador titulo="Promedio del colegio" valor={promedioColegio === null ? "—" : promedioColegio.toFixed(1)} unidad="ppm" nota={nombreFuente.toLowerCase()} />
         <Indicador titulo="Mejor resultado" valor={mejor ? String(Math.round(mejor.mejor! * 10) / 10) : "—"} unidad="ppm" nota={mejor ? `${mejor.alumno.nombre} · ${mejor.alumno.salon}` : undefined} />
-        <Indicador titulo="Alumnos con resultado" valor={`${conResultado.length}`} nota={`de ${filas.length} alumnos`} />
+        <Indicador
+          titulo="Alumnos evaluados"
+          valor={`${conResultado.length + filas.filter((f) => f.evaluadoSinNota).length}`}
+          nota={`de ${filas.length} · ${conResultado.length} con nota${
+            filas.some((f) => f.evaluadoSinNota) ? ` · ${filas.filter((f) => f.evaluadoSinNota).length} sin nota` : ""
+          }`}
+        />
       </div>
 
       <div className="grid lg:grid-cols-5 gap-6">
@@ -382,13 +396,14 @@ function PestanaSalon({
 
   const del = filas.filter((f) => f.alumno.salonId === salon.id).sort((a, b) => (b.mejor ?? -1) - (a.mejor ?? -1));
   const con = del.filter((f) => f.mejor !== null);
-  const sin = del.filter((f) => f.mejor === null);
+  const sin = del.filter((f) => f.mejor === null && !f.evaluadoSinNota);
+  const declinaron = del.filter((f) => f.evaluadoSinNota);
+  const totalIntentos = del.reduce((s, f) => s + f.intentos, 0);
   const max = Math.max(1, ...con.map((f) => f.mejor!));
   const promedioSalon = promedio(con.map((f) => f.mejor!));
   const enRanking = ranking.filter((r) => r.promedio !== null);
   const puesto = enRanking.findIndex((r) => r.salon.id === salon.id);
   const resultadoFormula = ranking.find((r) => r.salon.id === salon.id);
-  const totalIntentos = del.reduce((s, f) => s + f.intentos, 0);
 
   return (
     <div className="space-y-6">
@@ -415,7 +430,11 @@ function PestanaSalon({
         />
         <Indicador titulo="Promedio simple" valor={promedioSalon === null ? "—" : promedioSalon.toFixed(1)} unidad="ppm" nota={nombreFuente.toLowerCase()} />
         <Indicador titulo="Mejor del salón" valor={con.length ? String(Math.round(con[0].mejor! * 10) / 10) : "—"} unidad="ppm" nota={con[0]?.alumno.nombre} />
-        <Indicador titulo="Alumnos con resultado" valor={`${con.length}`} nota={`de ${del.length} · ${totalIntentos} intentos`} />
+        <Indicador
+          titulo="Alumnos evaluados"
+          valor={`${con.length + declinaron.length}`}
+          nota={`de ${del.length} · ${con.length} con nota${declinaron.length ? ` · ${declinaron.length} sin nota` : ""} · ${totalIntentos} intentos`}
+        />
       </div>
 
       <section className="tarjeta p-6">
@@ -439,9 +458,14 @@ function PestanaSalon({
             ))}
           </ol>
         )}
+        {declinaron.length > 0 && (
+          <p className="text-xs text-slate-500 mt-4" title="Se les intentó evaluar pero decidieron no dar su evaluación (x, W, Justify en el Excel)">
+            Evaluados sin nota ({declinaron.length}): {declinaron.map((f) => f.alumno.nombre).join(" · ")}
+          </p>
+        )}
         {sin.length > 0 && (
-          <p className="text-xs text-slate-400 mt-4">
-            Sin resultado ({sin.length}): {sin.map((f) => f.alumno.nombre).join(" · ")}
+          <p className="text-xs text-slate-400 mt-2">
+            Sin evaluar ({sin.length}): {sin.map((f) => f.alumno.nombre).join(" · ")}
           </p>
         )}
       </section>

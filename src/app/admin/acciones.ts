@@ -220,12 +220,16 @@ export interface NotaImportada {
   apellidos: string;
   /** PPM por columna (WPM 1, WPM 2…), en su posición; null = celda vacía, x, W, Justify. */
   notas: (number | null)[];
+  /** Marcas sin nota (x, W, Justify…): se le intentó evaluar pero decidió no dar su evaluación. */
+  marcas?: string[];
 }
 
 export interface ResultadoImportacion {
   nombres: string;
   apellidos: string;
   estado: "importado" | "sin_cambios" | "sin_notas" | "error";
+  /** Fue evaluado pero decidió no dar su evaluación (no tiene puntaje, cuenta como evaluado). */
+  evaluadoSinNota: boolean;
   cuentaNueva?: { usuario: string; clave: string };
   /** Cambios aplicados respecto a lo que ya estaba importado. */
   nuevas: number;
@@ -380,13 +384,43 @@ export async function importarNotasMedicion(
         if (error) throw new Error(error.message);
       }
 
+      // Evaluado sin nota: tiene marcas (x, W, Justify…) y ninguna nota válida
+      const conNota = notas.some((n) => n !== null);
+      const marcas = (f.marcas ?? []).map(limpiar).filter(Boolean);
+      const evaluadoSinNota = !conNota && marcas.length > 0;
+      const { data: marcaPrevia, error: errMarca } = await db
+        .from("evaluados_sin_nota")
+        .select("marcas")
+        .eq("medicion_id", medicionId)
+        .eq("alumno_id", alumnoId)
+        .maybeSingle();
+      if (errMarca) throw new Error(errMarca.message);
+      let cambioMarca = false;
+      if (evaluadoSinNota && (!marcaPrevia || (marcaPrevia.marcas as string[]).join("|") !== marcas.join("|"))) {
+        const { error } = await db.from("evaluados_sin_nota").upsert({ medicion_id: medicionId, alumno_id: alumnoId, marcas });
+        if (error) throw new Error(error.message);
+        cambioMarca = !marcaPrevia; // cambiar solo el texto de la marca no cuenta como cambio
+      } else if (!evaluadoSinNota && marcaPrevia) {
+        const { error } = await db.from("evaluados_sin_nota").delete().eq("medicion_id", medicionId).eq("alumno_id", alumnoId);
+        if (error) throw new Error(error.message);
+        cambioMarca = true;
+      }
+
       const nuevas = insertar.length;
       const quitadas = borrar.length;
-      const conNota = notas.some((n) => n !== null);
-      const estado = nuevas || cambiadas || quitadas ? "importado" : conNota ? "sin_cambios" : "sin_notas";
-      resultados.push({ nombres, apellidos, estado, cuentaNueva, nuevas, cambiadas, quitadas });
+      const estado = nuevas || cambiadas || quitadas || cambioMarca ? "importado" : conNota || evaluadoSinNota ? "sin_cambios" : "sin_notas";
+      resultados.push({ nombres, apellidos, estado, cuentaNueva, evaluadoSinNota, nuevas, cambiadas, quitadas });
     } catch (e) {
-      resultados.push({ nombres, apellidos, estado: "error", nuevas: 0, cambiadas: 0, quitadas: 0, detalle: e instanceof Error ? e.message : String(e) });
+      resultados.push({
+        nombres,
+        apellidos,
+        estado: "error",
+        evaluadoSinNota: false,
+        nuevas: 0,
+        cambiadas: 0,
+        quitadas: 0,
+        detalle: e instanceof Error ? e.message : String(e),
+      });
     }
   }
 

@@ -66,6 +66,7 @@ export default function ImportarMedicion() {
       nombres: a.nombres,
       apellidos: a.apellidos,
       notas: g ? g.columnas.map((c) => a.valores[c]) : [],
+      marcas: g ? g.columnas.map((c) => a.marcas[c]).filter((m): m is string => !!m) : [],
     }));
   };
 
@@ -129,10 +130,12 @@ export default function ImportarMedicion() {
 
   const incluidas = hojas.filter((h) => config[h.hoja]?.incluir);
   const conNota = (n: (number | null)[]) => n.some((v) => v !== null);
+  const sinNotaEvaluado = (a: { notas: (number | null)[]; marcas: string[] }) => !conNota(a.notas) && a.marcas.length > 0;
   const totalNotas = incluidas.reduce((s, h) => s + notasDe(h).filter((a) => conNota(a.notas)).length, 0);
   const cuentasNuevas = resultados.filter((r) => r.cuentaNueva).length;
   const importados = resultados.filter((r) => r.estado === "importado").length;
   const sinCambios = resultados.filter((r) => r.estado === "sin_cambios").length;
+  const evaluadosSinNota = resultados.filter((r) => r.evaluadoSinNota).length;
   const suma = (k: "nuevas" | "cambiadas" | "quitadas") => resultados.reduce((s, r) => s + r[k], 0);
   const sinNotas = resultados.filter((r) => r.estado === "sin_notas").length;
   const errores = resultados.filter((r) => r.estado === "error");
@@ -142,7 +145,8 @@ export default function ImportarMedicion() {
       <h2 className="text-lg font-semibold text-slate-800 mb-1">Importar resultados de una medición</h2>
       <p className="text-sm text-slate-500 mb-4">
         Sube el Excel con una hoja por salón (columna <b>Nombres</b> como &quot;APELLIDOS, NOMBRES&quot; y columnas <b>WPM 1</b>, <b>WPM 2</b>…).
-        Las celdas con x, W, Justify o vacías no cuentan. Los alumnos sin cuenta se crean automáticamente. Si vuelves a subir una medición que ya importaste (por ejemplo,
+        Las celdas vacías significan que no se le evaluó. Una x, W, Justify u otra marca significa que sí se le evaluó pero decidió no
+        dar su evaluación: no es un puntaje, pero cuenta como alumno evaluado. Los alumnos sin cuenta se crean automáticamente. Si vuelves a subir una medición que ya importaste (por ejemplo,
         con notas corregidas), solo se aplican los cambios: no se duplican notas.
       </p>
 
@@ -198,7 +202,8 @@ export default function ImportarMedicion() {
                   <th className="py-2 pr-3 font-medium">Sección</th>
                   <th className="py-2 pr-3 font-medium text-right">Alumnos</th>
                   <th className="py-2 pr-3 font-medium text-right">Con nota</th>
-                  <th className="py-2 pr-3 font-medium text-right">Sin nota</th>
+                  <th className="py-2 pr-3 font-medium text-right" title="Tiene x, W, Justify u otra marca">Evaluado sin nota</th>
+                  <th className="py-2 pr-3 font-medium text-right">Sin evaluar</th>
                   <th className="py-2 font-medium text-right">Nombre incompleto</th>
                 </tr>
               </thead>
@@ -207,6 +212,7 @@ export default function ImportarMedicion() {
                   const cfg = config[h.hoja];
                   const notas = notasDe(h);
                   const con = notas.filter((a) => conNota(a.notas)).length;
+                  const marcados = notas.filter(sinNotaEvaluado).length;
                   const incompletos = h.alumnos.filter((a) => a.incompleto).length;
                   return (
                     <tr key={h.hoja} className={`border-b border-slate-50 ${cfg?.incluir ? "" : "opacity-40"}`}>
@@ -224,7 +230,8 @@ export default function ImportarMedicion() {
                       </td>
                       <td className="py-2 pr-3 text-right tabular-nums">{h.alumnos.length}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{con}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-slate-500">{notas.length - con}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-slate-500">{marcados}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-slate-500">{notas.length - con - marcados}</td>
                       <td className={`py-2 text-right tabular-nums ${incompletos ? "text-amber-700 font-semibold" : "text-slate-400"}`}>{incompletos}</td>
                     </tr>
                   );
@@ -283,7 +290,8 @@ export default function ImportarMedicion() {
               </span>
             )}
             {sinCambios > 0 && <>, <b>{sinCambios}</b> sin cambios</>}
-            {sinNotas > 0 && <>, <b>{sinNotas}</b> sin nota</>}
+            {evaluadosSinNota > 0 && <>, <b>{evaluadosSinNota}</b> evaluados sin nota</>}
+            {sinNotas > 0 && <>, <b>{sinNotas}</b> sin evaluar</>}
             {cuentasNuevas > 0 && <>, <b>{cuentasNuevas}</b> cuentas nuevas</>}
             {errores.length > 0 && <>, <b className="text-rose-600">{errores.length}</b> con error</>}.
           </p>

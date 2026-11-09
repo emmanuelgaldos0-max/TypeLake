@@ -6,7 +6,10 @@ import * as XLSX from "xlsx";
  *  - una fila de encabezado con "Nombres" y columnas "WPM 1", "WPM 2", …
  *  - encima, celdas (combinadas) con el nombre de cada medición: "PRIMERA MEDICIÓN", …
  *  - nombres como "APELLIDOS, NOMBRES"
- *  - celdas con x, W, Justify o vacías = sin nota
+ *  - celda vacía = no se le evaluó
+ *  - celda con x, W, Justify u otra marca = se le intentó evaluar pero decidió no dar
+ *    su evaluación: no es un puntaje, pero cuenta como evaluado
+ *  - celda con FALTA, Ausente o similar = no vino: igual que vacía (no se le evaluó)
  */
 
 export interface GrupoMedicion {
@@ -21,6 +24,7 @@ export interface AlumnoHoja {
   original: string; // como estaba escrito en el Excel
   incompleto: boolean; // sin apellidos: no se puede crear una cuenta confiable
   valores: Record<number, number | null>; // columna → PPM
+  marcas: Record<number, string>; // columna → marca sin nota ("x", "Justify"…)
 }
 
 export interface HojaMedicion {
@@ -29,6 +33,9 @@ export interface HojaMedicion {
   grupos: GrupoMedicion[];
   alumnos: AlumnoHoja[];
 }
+
+/** Marcas que indican que el alumno no estuvo: no cuentan como evaluado. */
+const esAusencia = (v: string) => /^(falt|ausen|no vino|no asisti|inasist)/.test(norm(v));
 
 const esWpm = (v: unknown) => /^(wpm|ppm)/.test(norm(v));
 const ENCABEZADOS_NOMBRE = ["nombres", "nombre", "apellidos y nombres", "nombres y apellidos", "alumno", "alumnos", "estudiante"];
@@ -144,8 +151,14 @@ export function leerLibroMediciones(libro: XLSX.WorkBook): HojaMedicion[] {
       }
       vacias = 0;
       const valores: Record<number, number | null> = {};
-      for (const g of grupos) for (const c of g.columnas) valores[c] = leerNota(filas[r]?.[c]);
-      alumnos.push({ ...separarNombre(nombre), original: nombre, valores });
+      const marcas: Record<number, string> = {};
+      for (const g of grupos)
+        for (const c of g.columnas) {
+          valores[c] = leerNota(filas[r]?.[c]);
+          const texto = String(filas[r]?.[c] ?? "").trim();
+          if (valores[c] === null && texto && !esAusencia(texto)) marcas[c] = texto;
+        }
+      alumnos.push({ ...separarNombre(nombre), original: nombre, valores, marcas });
     }
 
     hojas.push({ hoja: nombreHoja, gradoSugerido: sugerirGrado(nombreHoja), grupos, alumnos });

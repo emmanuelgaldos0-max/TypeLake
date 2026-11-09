@@ -1,11 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { AlumnoDash, Formula, IntentoDash, SalonDash } from "@/lib/estadisticas";
+import type { AlumnoDash, EvaluadoSinNota, Formula, IntentoDash, SalonDash } from "@/lib/estadisticas";
 import { traerTodo } from "@/lib/supabase/paginar";
 
 export interface DatosDashboard {
   salones: SalonDash[];
   alumnos: AlumnoDash[];
   intentos: IntentoDash[];
+  /** Evaluados que decidieron no dar su evaluación (x, W, Justify en el Excel). */
+  sinNota: EvaluadoSinNota[];
   mediciones: { id: number; nombre: string }[];
   formulas: Formula[];
 }
@@ -25,12 +27,17 @@ export async function cargarDashboard(db: SupabaseClient, modo: "admin" | "publi
   let formulasQ = db.from("formulas_promedio").select("*").order("id");
   if (modo === "publico") formulasQ = formulasQ.eq("visible_alumnos", true);
 
-  const [salonesRaw, perfiles, intentosRaw, { data: mediciones }, { data: formulas }] = await Promise.all([
+  const [salonesRaw, perfiles, intentosRaw, sinNotaRaw, { data: mediciones }, { data: formulas }] = await Promise.all([
     traerTodo((d, h) => db.from("salones").select("id, seccion, grados(nombre, orden)").eq("anio", cfg?.anio_escolar ?? 0).range(d, h)),
     traerTodo((d, h) => db.from("perfiles").select("id, usuario, nombres, apellidos, salon_id").eq("rol", "alumno").eq("activo", true).range(d, h)),
     traerTodo((d, h) =>
       db.from("intentos").select("alumno_id, ppm, precision_pct, medicion_id, creado_en").in("estado", ["valido", "aprobado"]).order("creado_en").range(d, h),
     ),
+    // Si la migración 9 aún no se aplicó, el dashboard sigue funcionando sin estos datos
+    traerTodo((d, h) => db.from("evaluados_sin_nota").select("alumno_id, medicion_id").range(d, h)).catch((e) => {
+      console.error("[dashboard] evaluados_sin_nota:", e instanceof Error ? e.message : e);
+      return [] as { alumno_id: string; medicion_id: number }[];
+    }),
     db.from("mediciones").select("id, nombre, inicia_en").order("inicia_en"),
     formulasQ,
   ]);
@@ -76,10 +83,15 @@ export async function cargarDashboard(db: SupabaseClient, modo: "admin" | "publi
       t: i.creado_en,
     }));
 
+  const sinNota: EvaluadoSinNota[] = sinNotaRaw
+    .filter((e) => modo === "admin" || idPublico.has(e.alumno_id))
+    .map((e) => ({ a: modo === "publico" ? idPublico.get(e.alumno_id)! : e.alumno_id, med: e.medicion_id }));
+
   return {
     salones,
     alumnos,
     intentos,
+    sinNota,
     mediciones: (mediciones ?? []).map((m) => ({ id: m.id, nombre: m.nombre })),
     formulas: (formulas ?? []) as Formula[],
   };
