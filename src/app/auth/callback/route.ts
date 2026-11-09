@@ -10,12 +10,18 @@ export async function GET(request: NextRequest) {
 
   // Si la base de datos rechazó el registro (correo no autorizado), Supabase manda un error.
   if (searchParams.get("error")) {
-    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent("Esta cuenta de Google no está autorizada como administrador.")}`);
+    const detalle = searchParams.get("error_description") ?? searchParams.get("error") ?? "";
+    console.error("[auth/callback] Supabase devolvió un error:", detalle);
+    const mensaje = /database error|registro no permitido/i.test(detalle)
+      ? "Esta cuenta de Google no está autorizada como administrador."
+      : `No se pudo iniciar sesión con Google (${detalle}).`;
+    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(mensaje)}`);
   }
 
   if (codigo) {
     const supabase = await crearClienteServidor();
     const { data, error } = await supabase.auth.exchangeCodeForSession(codigo);
+    if (error) console.error("[auth/callback] exchangeCodeForSession falló:", error.message);
     if (!error) {
       const { data: perfil } = await supabase.from("perfiles").select("rol").eq("id", data.user.id).maybeSingle();
       if (perfil) return NextResponse.redirect(`${origin}${perfil.rol === "admin" ? destino : "/"}`);
