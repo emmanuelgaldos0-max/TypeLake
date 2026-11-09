@@ -24,7 +24,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es">
+    // suppressHydrationWarning: extensiones como LanguageTool o Grammarly modifican <html> y causan avisos falsos.
+    <html lang="es" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}>
         <Encabezado />
         <div className="flex-1 flex flex-col">{children}</div>
