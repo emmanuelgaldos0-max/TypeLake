@@ -4,7 +4,7 @@ import { randomInt } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { crearClienteAdmin, emailDeUsuario, obtenerSesion } from "@/lib/supabase/server";
-import { claveGrado, generarClave, normalizar, ordenDeGrado, usuarioBase } from "@/lib/credenciales";
+import { CLAVE_CAMBIADA_POR_ALUMNO, claveGrado, generarClave, normalizar, ordenDeGrado, usuarioBase } from "@/lib/credenciales";
 
 export interface FilaAlumno {
   grado: string;
@@ -126,7 +126,16 @@ async function guardarClave(db: SupabaseClient, alumnoId: string, clave: string)
   await db.from("credenciales").upsert({ alumno_id: alumnoId, clave, actualizado_en: new Date().toISOString() });
 }
 
-/** Genera una contraseña nueva para un alumno y la devuelve para entregársela. */
+/**
+ * Cierra todas las sesiones abiertas de un alumno (si alguien entró con sus credenciales,
+ * queda fuera). Si la migración 11 aún no se aplicó, solo se registra el aviso.
+ */
+async function cerrarSesiones(db: SupabaseClient, alumnoId: string) {
+  const { error } = await db.rpc("cerrar_sesiones_alumno", { p_alumno_id: alumnoId });
+  if (error) console.error("[cerrarSesiones]", error.message);
+}
+
+/** Genera una contraseña nueva para un alumno, cierra sus sesiones y la devuelve para entregársela. */
 export async function restablecerClave(alumnoId: string): Promise<string> {
   await exigirAdmin();
   const db = crearClienteAdmin();
@@ -134,6 +143,8 @@ export async function restablecerClave(alumnoId: string): Promise<string> {
   const { error } = await db.auth.admin.updateUserById(alumnoId, { password: clave });
   if (error) throw new Error(error.message);
   await guardarClave(db, alumnoId, clave);
+  await cerrarSesiones(db, alumnoId);
+  revalidatePath("/admin/alumnos");
   return clave;
 }
 
@@ -145,7 +156,9 @@ export interface FilaCredencial {
   apellidos: string;
   nombres: string;
   usuario: string;
-  clave: string | null; // null = creada antes de guardar contraseñas
+  clave: string | null; // null = no se conoce (creada antes de guardar contraseñas, o la cambió el alumno)
+  /** El alumno cambió su contraseña: el admin no la conoce y no hay que regenerarla sin avisar. */
+  cambiadaPorAlumno: boolean;
 }
 
 /** Credenciales de los alumnos activos (de un salón, o de todos si salonId es null). */
@@ -180,7 +193,8 @@ export async function listarCredenciales(salonId: number | null): Promise<FilaCr
         apellidos: p.apellidos,
         nombres: p.nombres,
         usuario: p.usuario,
-        clave: cred?.clave ?? null,
+        clave: cred?.clave ? cred.clave : null,
+        cambiadaPorAlumno: cred?.clave === CLAVE_CAMBIADA_POR_ALUMNO,
       };
     })
     .sort((a, b) => a.orden - b.orden || a.seccion.localeCompare(b.seccion) || a.apellidos.localeCompare(b.apellidos, "es"));
@@ -197,6 +211,7 @@ export async function generarClaves(alumnoIds: string[]): Promise<Record<string,
     const { error } = await db.auth.admin.updateUserById(id, { password: clave });
     if (error) throw new Error(error.message);
     await guardarClave(db, id, clave);
+    await cerrarSesiones(db, id);
     nuevas[id] = clave;
   }
   return nuevas;

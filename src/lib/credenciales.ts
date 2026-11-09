@@ -55,3 +55,9 @@ export function ordenDeGrado(nombre: string) {
   if (/primaria/i.test(nombre)) return 10 + n;
   return n;
 }
+
+/**
+ * Valor guardado en credenciales.clave cuando el alumno cambió su contraseña:
+ * el admin ya no la conoce (y no se guarda la que eligió el alumno).
+ */
+export const CLAVE_CAMBIADA_POR_ALUMNO = "";

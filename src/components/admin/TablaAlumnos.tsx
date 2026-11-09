@@ -16,6 +16,8 @@ export interface FilaTabla {
   salon: string;
   salonId: number | null;
   orden: number;
+  /** El alumno eligió su propia contraseña (no se guarda ni se muestra). */
+  clavePropia: boolean;
 }
 
 const TANDA = 20;
@@ -35,7 +37,7 @@ function descargarExcel(filas: FilaCredencial[], nombreArchivo: string) {
         Apellidos: f.apellidos,
         Nombres: f.nombres,
         Usuario: f.usuario,
-        Contraseña: f.clave ?? "(no guardada)",
+        Contraseña: f.clave ?? (f.cambiadaPorAlumno ? "Contraseña propia" : "(no guardada)"),
       })),
     );
     hoja["!cols"] = [{ wch: 4 }, { wch: 26 }, { wch: 24 }, { wch: 16 }, { wch: 16 }];
@@ -66,7 +68,13 @@ export default function TablaAlumnos({ filas }: { filas: FilaTabla[] }) {
   );
 
   const nuevaClave = (f: FilaTabla) => {
-    if (!confirm(`¿Generar una contraseña nueva para ${f.nombres} ${f.apellidos}? La anterior dejará de funcionar.`)) return;
+    const aviso = f.clavePropia && !claves[f.id] ? "\n\nEste alumno eligió su propia contraseña: dejará de funcionar y tendrás que darle la nueva." : "";
+    if (
+      !confirm(
+        `¿Generar una contraseña nueva para ${f.nombres} ${f.apellidos}?\n\nLa anterior dejará de funcionar y se cerrará su sesión en todos los dispositivos.${aviso}`,
+      )
+    )
+      return;
     setOcupado(f.id);
     iniciar(async () => {
       const clave = await restablecerClave(f.id);
@@ -92,7 +100,8 @@ export default function TablaAlumnos({ filas }: { filas: FilaTabla[] }) {
     window.dispatchEvent(new Event("typelake:cargando"));
     try {
       let lista = await listarCredenciales(salon === "todos" ? null : (salonElegido?.id ?? null));
-      const sinClave = lista.filter((f) => !f.clave);
+      // Quien cambió su contraseña no se regenera: el alumno la conoce
+      const sinClave = lista.filter((f) => !f.clave && !f.cambiadaPorAlumno);
 
       if (sinClave.length > 0) {
         const ok = confirm(
@@ -163,6 +172,7 @@ export default function TablaAlumnos({ filas }: { filas: FilaTabla[] }) {
                 <th className="py-2.5 pl-6 pr-3 font-semibold">Salón</th>
                 <th className="py-2.5 pr-3 font-semibold">Apellidos y nombres</th>
                 <th className="py-2.5 pr-3 font-semibold">Usuario</th>
+                <th className="py-2.5 pr-3 font-semibold">Contraseña</th>
                 <th className="py-2.5 pr-3 font-semibold">Estado</th>
                 <th className="py-2.5 pr-6 font-semibold"></th>
               </tr>
@@ -179,6 +189,15 @@ export default function TablaAlumnos({ filas }: { filas: FilaTabla[] }) {
                     </Link>
                   </td>
                   <td className="py-2.5 pr-3 font-mono text-slate-600">{f.usuario}</td>
+                  <td className="py-2.5 pr-3 whitespace-nowrap">
+                    {f.clavePropia && !claves[f.id] ? (
+                      <span className="chip bg-violet-50 text-violet-700" title="El alumno la cambió. No se guarda ni se muestra; si la olvidó, genera una nueva.">
+                        Contraseña propia
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400">Del sistema</span>
+                    )}
+                  </td>
                   <td className="py-2.5 pr-3">
                     <span className={`chip ${f.activo ? "bg-emerald-50 text-emerald-700" : ""}`}>{f.activo ? "Activo" : "Desactivado"}</span>
                   </td>

@@ -22,6 +22,7 @@ export default async function Encabezado() {
             { href: "/", texto: "Practicar" },
             { href: "/progreso", texto: "Mi progreso" },
             { href: "/tablero", texto: "Tablero" },
+            { href: "/cuenta", texto: "Mi cuenta" },
           ]
         : [
             { href: "/", texto: "Practicar" },
