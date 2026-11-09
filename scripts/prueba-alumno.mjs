@@ -1,4 +1,4 @@
-// Prueba de punta a punta con un alumno temporal; borra todo al terminar.
+﻿// Prueba de punta a punta con un alumno temporal; borra todo al terminar.
 // Uso: node --env-file=.env.local scripts/prueba-alumno.mjs
 import { createClient } from "@supabase/supabase-js";
 
@@ -30,7 +30,7 @@ try {
   console.log("✔ Inicio de sesión con usuario y contraseña");
 
   const { data: r, error: e3 } = await alumno.rpc("registrar_intento", {
-    p: { nivel: 1, duracion_seg: 60, correctos: 150, incorrectos: 3, pulsaciones: 160, errores: 6, errores_por_tecla: { "á": 2 }, senales: { variacionRitmo: 0.6 } },
+    p: { duracion_seg: 60, correctos: 150, incorrectos: 3, pulsaciones: 160, errores: 6, errores_por_tecla: { "á": 2 }, senales: { variacionRitmo: 0.6 } },
   });
   if (e3) throw new Error("registrar_intento: " + e3.message);
   console.log("✔ Intento registrado:", r);
