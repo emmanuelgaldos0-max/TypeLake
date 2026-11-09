@@ -13,6 +13,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Todas las páginas dependen de la sesión del usuario: nunca generarlas como estáticas.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "TypeLake - Concurso de Mecanografía",
   description: "Prueba de mecanografía en español",
