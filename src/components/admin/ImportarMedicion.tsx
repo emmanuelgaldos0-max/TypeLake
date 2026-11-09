@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
-import { importarNotasMedicion, prepararMedicionHistorica, type ResultadoImportacion } from "@/app/admin/acciones";
+import { buscarMedicionPorNombre, importarNotasMedicion, prepararMedicionHistorica, type ResultadoImportacion } from "@/app/admin/acciones";
 import { leerLibroMediciones, type HojaMedicion } from "@/lib/leerMedicionExcel";
 import Spinner from "@/components/ui/Spinner";
 import { mensajeError } from "@/lib/errores";
@@ -31,6 +31,27 @@ export default function ImportarMedicion() {
   const [progreso, setProgreso] = useState<string | null>(null);
   const [resultados, setResultados] = useState<ResultadoSalon[]>([]);
   const [fallo, setFallo] = useState("");
+  // Si ya existe una medición con ese nombre, se reutiliza su fecha y solo se aplican cambios
+  const [existente, setExistente] = useState<{ nombre: string; fecha: string } | null>(null);
+
+  useEffect(() => {
+    const buscado = nombre.trim();
+    if (!buscado) return setExistente(null);
+    let vigente = true;
+    const t = setTimeout(() => {
+      buscarMedicionPorNombre(buscado)
+        .then((m) => {
+          if (!vigente) return;
+          setExistente(m ? { nombre: buscado, fecha: m.fecha } : null);
+          if (m) setFecha(m.fecha);
+        })
+        .catch(() => vigente && setExistente(null));
+    }, 400);
+    return () => {
+      vigente = false;
+      clearTimeout(t);
+    };
+  }, [nombre]);
 
   // Mediciones encontradas en cualquier hoja
   const grupos = useMemo(() => {
@@ -44,7 +65,7 @@ export default function ImportarMedicion() {
     return h.alumnos.filter((a) => !a.incompleto).map((a) => ({
       nombres: a.nombres,
       apellidos: a.apellidos,
-      notas: g ? g.columnas.map((c) => a.valores[c]).filter((v): v is number => v !== null) : [],
+      notas: g ? g.columnas.map((c) => a.valores[c]) : [],
     }));
   };
 
@@ -107,9 +128,12 @@ export default function ImportarMedicion() {
   };
 
   const incluidas = hojas.filter((h) => config[h.hoja]?.incluir);
-  const totalNotas = incluidas.reduce((s, h) => s + notasDe(h).filter((a) => a.notas.length).length, 0);
+  const conNota = (n: (number | null)[]) => n.some((v) => v !== null);
+  const totalNotas = incluidas.reduce((s, h) => s + notasDe(h).filter((a) => conNota(a.notas)).length, 0);
   const cuentasNuevas = resultados.filter((r) => r.cuentaNueva).length;
   const importados = resultados.filter((r) => r.estado === "importado").length;
+  const sinCambios = resultados.filter((r) => r.estado === "sin_cambios").length;
+  const suma = (k: "nuevas" | "cambiadas" | "quitadas") => resultados.reduce((s, r) => s + r[k], 0);
   const sinNotas = resultados.filter((r) => r.estado === "sin_notas").length;
   const errores = resultados.filter((r) => r.estado === "error");
 
@@ -118,8 +142,8 @@ export default function ImportarMedicion() {
       <h2 className="text-lg font-semibold text-slate-800 mb-1">Importar resultados de una medición</h2>
       <p className="text-sm text-slate-500 mb-4">
         Sube el Excel con una hoja por salón (columna <b>Nombres</b> como &quot;APELLIDOS, NOMBRES&quot; y columnas <b>WPM 1</b>, <b>WPM 2</b>…).
-        Las celdas con x, W, Justify o vacías no cuentan. Los alumnos sin cuenta se crean automáticamente. Si importas otra vez la misma medición,
-        sus notas se reemplazan.
+        Las celdas con x, W, Justify o vacías no cuentan. Los alumnos sin cuenta se crean automáticamente. Si vuelves a subir una medición que ya importaste (por ejemplo,
+        con notas corregidas), solo se aplican los cambios: no se duplican notas.
       </p>
 
       <input
@@ -158,6 +182,13 @@ export default function ImportarMedicion() {
             </label>
           </div>
 
+          {existente && existente.nombre === nombre.trim() && (
+            <p className="text-sm bg-lago-50 border border-lago-200 text-lago-800 rounded-lg px-4 py-3">
+              <b>&quot;{existente.nombre}&quot;</b> ya está en TypeLake. Al importar solo se aplicarán los cambios respecto a lo que ya
+              subiste: notas nuevas, notas corregidas y notas que borraste del Excel. Las demás se quedan igual.
+            </p>
+          )}
+
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -175,7 +206,7 @@ export default function ImportarMedicion() {
                 {hojas.map((h) => {
                   const cfg = config[h.hoja];
                   const notas = notasDe(h);
-                  const con = notas.filter((a) => a.notas.length).length;
+                  const con = notas.filter((a) => conNota(a.notas)).length;
                   const incompletos = h.alumnos.filter((a) => a.incompleto).length;
                   return (
                     <tr key={h.hoja} className={`border-b border-slate-50 ${cfg?.incluir ? "" : "opacity-40"}`}>
@@ -219,7 +250,7 @@ export default function ImportarMedicion() {
                   })}
               </ul>
               <p className="mt-1">
-                Corrige esos nombres en el Excel como <b>&quot;APELLIDOS, NOMBRES&quot;</b> y vuelve a importar; las notas ya importadas se reemplazan sin duplicarse.
+                Corrige esos nombres en el Excel como <b>&quot;APELLIDOS, NOMBRES&quot;</b> y vuelve a importar; las notas ya importadas no se duplican.
               </p>
             </div>
           )}
@@ -245,7 +276,13 @@ export default function ImportarMedicion() {
       {resultados.length > 0 && progreso === null && (
         <div className="mt-6 border-t border-slate-100 pt-5">
           <p className="text-slate-700 mb-3">
-            <b className="text-emerald-600">{importados}</b> alumnos con notas importadas
+            <b className="text-emerald-600">{importados}</b> alumnos con cambios
+            {importados > 0 && (
+              <span className="text-slate-500">
+                {" "}({suma("nuevas")} notas nuevas, {suma("cambiadas")} corregidas, {suma("quitadas")} quitadas)
+              </span>
+            )}
+            {sinCambios > 0 && <>, <b>{sinCambios}</b> sin cambios</>}
             {sinNotas > 0 && <>, <b>{sinNotas}</b> sin nota</>}
             {cuentasNuevas > 0 && <>, <b>{cuentasNuevas}</b> cuentas nuevas</>}
             {errores.length > 0 && <>, <b className="text-rose-600">{errores.length}</b> con error</>}.

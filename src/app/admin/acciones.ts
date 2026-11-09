@@ -218,15 +218,19 @@ export async function cambiarActivo(alumnoId: string, activo: boolean) {
 export interface NotaImportada {
   nombres: string;
   apellidos: string;
-  notas: number[]; // PPM de cada intento (WPM 1, WPM 2…), ya sin celdas vacías/x/W/Justify
+  /** PPM por columna (WPM 1, WPM 2…), en su posición; null = celda vacía, x, W, Justify. */
+  notas: (number | null)[];
 }
 
 export interface ResultadoImportacion {
   nombres: string;
   apellidos: string;
-  estado: "importado" | "sin_notas" | "error";
+  estado: "importado" | "sin_cambios" | "sin_notas" | "error";
   cuentaNueva?: { usuario: string; clave: string };
-  intentos: number;
+  /** Cambios aplicados respecto a lo que ya estaba importado. */
+  nuevas: number;
+  cambiadas: number;
+  quitadas: number;
   detalle?: string;
 }
 
@@ -235,6 +239,16 @@ const LIMA = "-05:00";
 function codigoAleatorio() {
   const letras = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   return Array.from({ length: 6 }, () => letras[randomInt(letras.length)]).join("");
+}
+
+/** Si ya existe una medición con ese nombre, devuelve su fecha (YYYY-MM-DD, hora de Lima). */
+export async function buscarMedicionPorNombre(nombre: string): Promise<{ id: number; fecha: string } | null> {
+  await exigirAdmin();
+  const db = crearClienteAdmin();
+  const { data } = await db.from("mediciones").select("id, inicia_en").eq("nombre", limpiar(nombre)).maybeSingle();
+  if (!data) return null;
+  const fecha = new Date(new Date(data.inicia_en as string).getTime() - 5 * 3600 * 1000).toISOString().slice(0, 10);
+  return { id: data.id as number, fecha };
 }
 
 /** Crea (o reutiliza, si ya existe con el mismo nombre) una medición pasada de un día completo. */
@@ -264,9 +278,20 @@ export async function prepararMedicionHistorica(nombre: string, fecha: string): 
   throw new Error("No se pudo generar un código único");
 }
 
+const redondear = (ppm: number) => Math.round(ppm * 10) / 10;
+
+/** Campos de un intento importado que dependen de las PPM. */
+function camposNota(ppm: number) {
+  const correctos = Math.round(ppm * 5);
+  return { ppm: redondear(ppm), ppm_bruta: redondear(ppm), correctos, pulsaciones: correctos };
+}
+
 /**
  * Importa las notas de un salón (máx. 25 alumnos por llamada).
- * Crea las cuentas que falten y reemplaza los intentos previos de esos alumnos en la medición.
+ * Crea las cuentas que falten y, si la medición ya tenía notas importadas, solo aplica
+ * las diferencias columna por columna: agrega las nuevas, corrige las que cambiaron y
+ * quita las que ya no están en el Excel. Volver a subir el mismo archivo no cambia nada.
+ * Los intentos hechos en línea durante la medición nunca se tocan.
  */
 export async function importarNotasMedicion(
   medicionId: number,
@@ -280,7 +305,7 @@ export async function importarNotasMedicion(
   const db = crearClienteAdmin();
   const ctx = await contextoAlumnos(db);
   const salon = await ctx.salonId(limpiar(grado), limpiar(seccion));
-  const creadoEn = `${fecha}T10:00:00${LIMA}`;
+  const creadoEn = new Date(`${fecha}T10:00:00${LIMA}`).getTime();
 
   const resultados: ResultadoImportacion[] = [];
   for (const f of filas) {
@@ -296,39 +321,72 @@ export async function importarNotasMedicion(
         cuentaNueva = { usuario: nuevo.usuario, clave: nuevo.clave };
       }
 
-      // Reemplazar lo importado antes para este alumno en esta medición
-      await db.from("intentos").delete().eq("medicion_id", medicionId).eq("alumno_id", alumnoId);
+      const notas = f.notas.map((n) => (typeof n === "number" && Number.isFinite(n) && n >= 0 && n < 1000 ? n : null));
 
-      const notas = f.notas.filter((n) => Number.isFinite(n) && n >= 0 && n < 1000);
-      if (notas.length) {
-        const { error } = await db.from("intentos").insert(
-          notas.map((ppm, i) => {
-            const correctos = Math.round(ppm * 5);
-            return {
-              alumno_id: alumnoId,
-              salon_id: salon,
-              modo: "medicion",
-              medicion_id: medicionId,
-              duracion_seg: 60,
-              ppm: Math.round(ppm * 10) / 10,
-              ppm_bruta: Math.round(ppm * 10) / 10,
-              precision_pct: null,
-              correctos,
-              incorrectos: 0,
-              pulsaciones: correctos,
-              errores: 0,
-              senales: { importado: true, columna: i + 1 },
-              estado: "aprobado",
-              motivos: ["importado_de_excel"],
-              creado_en: new Date(new Date(creadoEn).getTime() + i * 60000).toISOString(),
-            };
-          }),
-        );
+      // Lo que ya estaba importado de esta medición para este alumno, por columna
+      const { data: previos, error: errLeer } = await db
+        .from("intentos")
+        .select("id, ppm, senales")
+        .eq("medicion_id", medicionId)
+        .eq("alumno_id", alumnoId)
+        .eq("senales->>importado", "true");
+      if (errLeer) throw new Error(errLeer.message);
+      const porColumna = new Map<number, { id: number; ppm: number }>();
+      const sobrantes: number[] = [];
+      for (const p of previos ?? []) {
+        const col = Number((p.senales as { columna?: number })?.columna);
+        if (!col || porColumna.has(col) || col > notas.length) sobrantes.push(p.id as number);
+        else porColumna.set(col, { id: p.id as number, ppm: Number(p.ppm) });
+      }
+
+      const insertar: Record<string, unknown>[] = [];
+      const borrar = [...sobrantes];
+      let cambiadas = 0;
+      for (let i = 0; i < notas.length; i++) {
+        const col = i + 1;
+        const nota = notas[i];
+        const previo = porColumna.get(col);
+        if (nota === null) {
+          if (previo) borrar.push(previo.id);
+        } else if (!previo) {
+          insertar.push({
+            alumno_id: alumnoId,
+            salon_id: salon,
+            modo: "medicion",
+            medicion_id: medicionId,
+            duracion_seg: 60,
+            ...camposNota(nota),
+            precision_pct: null,
+            incorrectos: 0,
+            errores: 0,
+            senales: { importado: true, columna: col },
+            estado: "aprobado",
+            motivos: ["importado_de_excel"],
+            creado_en: new Date(creadoEn + i * 60000).toISOString(),
+          });
+        } else if (previo.ppm !== redondear(nota)) {
+          const { error } = await db.from("intentos").update(camposNota(nota)).eq("id", previo.id);
+          if (error) throw new Error(error.message);
+          cambiadas++;
+        }
+      }
+
+      if (borrar.length) {
+        const { error } = await db.from("intentos").delete().in("id", borrar);
         if (error) throw new Error(error.message);
       }
-      resultados.push({ nombres, apellidos, estado: notas.length ? "importado" : "sin_notas", cuentaNueva, intentos: notas.length });
+      if (insertar.length) {
+        const { error } = await db.from("intentos").insert(insertar);
+        if (error) throw new Error(error.message);
+      }
+
+      const nuevas = insertar.length;
+      const quitadas = borrar.length;
+      const conNota = notas.some((n) => n !== null);
+      const estado = nuevas || cambiadas || quitadas ? "importado" : conNota ? "sin_cambios" : "sin_notas";
+      resultados.push({ nombres, apellidos, estado, cuentaNueva, nuevas, cambiadas, quitadas });
     } catch (e) {
-      resultados.push({ nombres, apellidos, estado: "error", intentos: 0, detalle: e instanceof Error ? e.message : String(e) });
+      resultados.push({ nombres, apellidos, estado: "error", nuevas: 0, cambiadas: 0, quitadas: 0, detalle: e instanceof Error ? e.message : String(e) });
     }
   }
 
