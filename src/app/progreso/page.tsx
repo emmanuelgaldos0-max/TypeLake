@@ -22,14 +22,22 @@ export default async function PaginaProgreso() {
   if (sesion.perfil.rol === "admin") redirect("/admin");
 
   const db = await crearClienteServidor();
-  const [{ data }, { data: formulas }] = await Promise.all([
+  const [{ data }, { data: formulas }, { data: cfg }] = await Promise.all([
     db
       .from("intentos")
       .select("ppm, precision_pct, creado_en, estado, modo, errores_por_tecla")
       .order("creado_en", { ascending: true })
       .limit(500),
     db.from("formulas_promedio").select("id, nombre").eq("visible_alumnos", true).order("id"),
+    // select("*") para no fallar si la migración 10 aún no se aplicó
+    db.from("configuracion").select("*").single(),
   ]);
+  const verOtrosSalones = (cfg as { ver_otros_salones?: boolean } | null)?.ver_otros_salones !== false;
+  let mejorColegio: number | null = null;
+  if (!verOtrosSalones) {
+    const { data: m } = await db.rpc("mejor_puntaje_colegio");
+    mejorColegio = m === null || m === undefined ? null : Number(m);
+  }
 
   const intentos = ((data ?? []) as FilaIntento[]).map((i) => ({
     ...i,
@@ -119,7 +127,7 @@ export default async function PaginaProgreso() {
       </section>
 
       <div className="grid lg:grid-cols-2 gap-6">
-        <RankingAlumnos />
+        <RankingAlumnos verOtrosSalones={verOtrosSalones} mejorColegio={mejorColegio} />
         <PromedioSalones formulas={formulas ?? []} miSalon={sesion.perfil.salon_id} />
       </div>
     </main>

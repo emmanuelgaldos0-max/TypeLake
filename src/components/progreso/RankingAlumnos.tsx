@@ -16,7 +16,14 @@ interface Fila {
 const AZUL = "#2a78d6";
 const NARANJA = "#eb6834";
 
-export default function RankingAlumnos() {
+interface Props {
+  /** false: el admin desactivó ver otros salones; solo se compara con el propio salón. */
+  verOtrosSalones: boolean;
+  /** Puntaje más alto del colegio (sin nombre); se muestra cuando no se ven otros salones. */
+  mejorColegio: number | null;
+}
+
+export default function RankingAlumnos({ verOtrosSalones, mejorColegio }: Props) {
   const [alcance, setAlcance] = useState<Alcance>("salon");
   const [limite, setLimite] = useState<number>(10);
   const [filas, setFilas] = useState<Fila[] | null>(null);
@@ -45,19 +52,33 @@ export default function RankingAlumnos() {
   return (
     <section className="tarjeta p-6 animate-aparecer">
       <h2 className="font-semibold text-slate-800">¿Cómo vas frente a los demás?</h2>
-      <p className="text-sm text-slate-500 mb-4">Mejor resultado válido de cada alumno, en palabras por minuto.</p>
+      <p className="text-sm text-slate-500 mb-4">
+        Mejor resultado válido de cada alumno{verOtrosSalones ? "" : " de tu salón"}, en palabras por minuto.
+      </p>
+
+      {!verOtrosSalones && (
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 mb-4">
+          <span className="text-sm text-amber-900">Puntaje más alto del colegio</span>
+          <span className="text-xl font-extrabold tabular-nums text-amber-700">
+            {mejorColegio === null ? "—" : Math.round(mejorColegio * 10) / 10}
+            {mejorColegio !== null && <span className="text-sm font-medium ml-1">ppm</span>}
+          </span>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2 mb-5">
-        <Segmentado
-          etiqueta="Comparar con"
-          valor={alcance}
-          onCambio={setAlcance}
-          opciones={[
-            { valor: "salon", texto: "Mi salón" },
-            { valor: "grado", texto: "Mi grado" },
-            { valor: "colegio", texto: "Colegio" },
-          ]}
-        />
+        {verOtrosSalones && (
+          <Segmentado
+            etiqueta="Comparar con"
+            valor={alcance}
+            onCambio={setAlcance}
+            opciones={[
+              { valor: "salon", texto: "Mi salón" },
+              { valor: "grado", texto: "Mi grado" },
+              { valor: "colegio", texto: "Colegio" },
+            ]}
+          />
+        )}
         <Segmentado
           etiqueta="Mostrar"
           valor={limite}

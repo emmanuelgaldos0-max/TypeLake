@@ -487,3 +487,20 @@ export async function revisarIntento(intentoId: number, decision: "aprobado" | "
   revalidatePath("/admin/revision");
   revalidatePath("/admin");
 }
+
+// ───────────────────────── Privacidad ─────────────────────────
+
+/** Activa o desactiva que los alumnos vean nombres y puntajes de otros salones. */
+/** Devuelve un mensaje de error o null (en producción, Next oculta el texto de los errores lanzados). */
+export async function cambiarVerOtrosSalones(ver: boolean): Promise<string | null> {
+  await exigirAdmin();
+  const db = crearClienteAdmin();
+  const { error } = await db.from("configuracion").update({ ver_otros_salones: ver, actualizado_en: new Date().toISOString() }).eq("id", true);
+  if (error) {
+    return /ver_otros_salones/.test(error.message) ? "Falta aplicar la migración 10 (visibilidad de salones) en Supabase." : error.message;
+  }
+  revalidatePath("/admin");
+  revalidatePath("/progreso");
+  revalidatePath("/tablero");
+  return null;
+}
