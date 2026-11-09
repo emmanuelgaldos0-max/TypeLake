@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import * as XLSX from "xlsx";
 import { cambiarActivo, generarClaves, listarCredenciales, restablecerClave, type FilaCredencial } from "@/app/admin/acciones";
+import { bloquearMemesAlumno } from "@/app/memes/acciones";
 import Spinner from "@/components/ui/Spinner";
 import { mensajeError } from "@/lib/errores";
 
@@ -18,6 +19,8 @@ export interface FilaTabla {
   orden: number;
   /** El alumno eligió su propia contraseña (no se guarda ni se muestra). */
   clavePropia: boolean;
+  /** El admin desactivó los memes de este alumno. */
+  memesBloqueados: boolean;
 }
 
 const TANDA = 20;
@@ -89,6 +92,17 @@ export default function TablaAlumnos({ filas }: { filas: FilaTabla[] }) {
     setOcupado(f.id);
     iniciar(async () => {
       await cambiarActivo(f.id, !f.activo);
+      setOcupado(null);
+    });
+  };
+
+  const alternarMemes = (f: FilaTabla) => {
+    const accion = f.memesBloqueados ? "volver a permitir" : "desactivar";
+    if (!confirm(`¿Seguro que quieres ${accion} los memes de ${f.nombres} ${f.apellidos}?`)) return;
+    setOcupado(f.id);
+    iniciar(async () => {
+      const fallo = await bloquearMemesAlumno(f.id, !f.memesBloqueados);
+      if (fallo) alert(fallo);
       setOcupado(null);
     });
   };
@@ -200,6 +214,7 @@ export default function TablaAlumnos({ filas }: { filas: FilaTabla[] }) {
                   </td>
                   <td className="py-2.5 pr-3">
                     <span className={`chip ${f.activo ? "bg-emerald-50 text-emerald-700" : ""}`}>{f.activo ? "Activo" : "Desactivado"}</span>
+                    {f.memesBloqueados && <span className="chip ml-1 bg-rose-50 text-rose-700">Sin memes</span>}
                   </td>
                   <td className="py-2.5 pr-6 text-right whitespace-nowrap">
                     {ocupado === f.id && pendiente ? (
@@ -213,6 +228,9 @@ export default function TablaAlumnos({ filas }: { filas: FilaTabla[] }) {
                             Nueva contraseña
                           </button>
                         )}
+                        <button disabled={!!ocupado} onClick={() => alternarMemes(f)} className="btn-enlace text-slate-500">
+                          {f.memesBloqueados ? "Permitir memes" : "Quitar memes"}
+                        </button>
                         <button disabled={!!ocupado} onClick={() => alternar(f)} className="btn-enlace text-slate-500">
                           {f.activo ? "Desactivar" : "Activar"}
                         </button>

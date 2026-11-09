@@ -51,6 +51,7 @@ export default async function PanelAdmin() {
     { href: "/admin/revision", titulo: "Revisar intentos", texto: "Aprueba o rechaza los intentos que el antitrampas marcó como sospechosos." },
     { href: "/admin/alumnos", titulo: "Alumnos y credenciales", texto: "Importa alumnos, descarga usuarios y contraseñas, restablece claves." },
     { href: "/admin/mediciones", titulo: "Mediciones", texto: "Importa los resultados de las mediciones tomadas en el colegio." },
+    { href: "/admin/memes", titulo: "Memes", texto: "Sube memes para los resultados y aprueba los que envían los alumnos." },
     { href: "/", titulo: "Probar la prueba", texto: "Haz una prueba de 1 minuto como la verán los alumnos." },
   ];
 

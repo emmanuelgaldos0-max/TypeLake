@@ -14,7 +14,13 @@ const MOTIVOS: Record<string, string> = {
   salio_de_la_pestana: "saliste de la pestaña durante la medición",
 };
 
-export default function PracticaAlumno({ guardar }: { guardar: boolean }) {
+export default function PracticaAlumno({
+  guardar,
+  memes,
+}: {
+  guardar: boolean;
+  memes?: { cuenta: "alumno" | "sin_cuenta"; activos: boolean; bloqueados: boolean };
+}) {
   const registrar = useCallback(async (r: Resultado): Promise<AvisoGuardado> => {
     const supabase = crearClienteNavegador();
     const { data, error } = await supabase.rpc("registrar_intento", {
@@ -47,5 +53,5 @@ export default function PracticaAlumno({ guardar }: { guardar: boolean }) {
     return data ? Number(data.ppm) : null;
   }, []);
 
-  return <PruebaMecanografia guardar={guardar ? registrar : undefined} obtenerRecord={guardar ? obtenerRecord : undefined} />;
+  return <PruebaMecanografia guardar={guardar ? registrar : undefined} obtenerRecord={guardar ? obtenerRecord : undefined} memes={memes} />;
 }

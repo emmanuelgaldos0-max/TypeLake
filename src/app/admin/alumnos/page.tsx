@@ -1,7 +1,7 @@
 import ImportarAlumnos from "@/components/admin/ImportarAlumnos";
 import TablaAlumnos, { type FilaTabla } from "@/components/admin/TablaAlumnos";
 import { CLAVE_CAMBIADA_POR_ALUMNO } from "@/lib/credenciales";
-import { crearClienteServidor } from "@/lib/supabase/server";
+import { crearClienteAdmin, crearClienteServidor } from "@/lib/supabase/server";
 
 export default async function PaginaAlumnos() {
   const db = await crearClienteServidor();
@@ -9,6 +9,10 @@ export default async function PaginaAlumnos() {
     .from("perfiles")
     .select("id, usuario, nombres, apellidos, activo, salon_id, salones(seccion, grados(nombre, orden)), credenciales(clave)")
     .eq("rol", "alumno");
+
+  // Alumnos con memes bloqueados (si la migración 12 aún no se aplicó, ninguno)
+  const { data: bloqueos } = await crearClienteAdmin().from("preferencias_memes").select("alumno_id").eq("bloqueados", true);
+  const memesBloqueados = new Set((bloqueos ?? []).map((b) => b.alumno_id as string));
 
   type Salon = { seccion: string; grados: { nombre: string; orden: number } | null } | null;
   const filas: FilaTabla[] = (data ?? [])
@@ -25,6 +29,7 @@ export default async function PaginaAlumnos() {
         salon: s ? `${s.grados?.nombre ?? ""} ${s.seccion}` : "Sin salón",
         salonId: (p.salon_id as number | null) ?? null,
         clavePropia: clave === CLAVE_CAMBIADA_POR_ALUMNO,
+        memesBloqueados: memesBloqueados.has(p.id as string),
         orden: (s?.grados?.orden ?? 99) * 100 + (s?.seccion.charCodeAt(0) ?? 0),
       };
     })

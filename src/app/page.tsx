@@ -1,11 +1,18 @@
 import Link from "next/link";
 import PracticaAlumno from "@/components/PracticaAlumno";
+import { preferenciaMemes } from "@/lib/memesServidor";
 import { obtenerSesion } from "@/lib/supabase/server";
 
 export default async function Inicio() {
   const sesion = await obtenerSesion();
   const esAlumno = sesion?.perfil.rol === "alumno";
   const nombre = sesion?.perfil.nombres.split(" ")[0];
+  // Memes: alumnos según su preferencia; sin cuenta, apagados hasta que los activen. El admin no los ve.
+  const memes = esAlumno
+    ? { cuenta: "alumno" as const, ...(await preferenciaMemes(sesion!.user.id)) }
+    : !sesion
+      ? { cuenta: "sin_cuenta" as const, activos: false, bloqueados: false }
+      : undefined;
 
   return (
     <main className="flex-1 px-4 pt-10 pb-12 animate-aparecer">
@@ -44,7 +51,7 @@ export default async function Inicio() {
           </p>
         )}
       </div>
-      <PracticaAlumno guardar={esAlumno} />
+      <PracticaAlumno guardar={esAlumno} memes={memes} />
     </main>
   );
 }

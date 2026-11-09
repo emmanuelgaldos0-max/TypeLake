@@ -4,12 +4,14 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { generarTexto } from "@/lib/generarTexto";
 import { calcularPpm, contarCorrectos, variacionRitmo, type Resultado } from "@/lib/metricas";
 import Spinner from "@/components/ui/Spinner";
+import { cambiarMisMemes, elegirMeme } from "@/app/memes/acciones";
 
 type Estado = "listo" | "escribiendo" | "terminado";
 
 const DURACION_SEG = 60;
 const ALTO_LINEA_REM = 2.6;
 const CLAVE_SESION = "typelake_mejor_sesion";
+const CLAVE_MEMES = "typelake_memes"; // preferencia de memes de quien practica sin cuenta
 
 export interface AvisoGuardado {
   tipo: "ok" | "aviso" | "error" | "cargando";
@@ -22,6 +24,19 @@ interface Props {
   guardar?: (r: Resultado) => Promise<AvisoGuardado>;
   /** Récord registrado del alumno (null si aún no tiene). Si no se pasa, no se muestra. */
   obtenerRecord?: () => Promise<number | null>;
+  /**
+   * Memes en el resultado. alumno: su preferencia guardada (bloqueados = el admin los
+   * desactivó). Sin cuenta: apagados por defecto y la preferencia queda en el navegador.
+   */
+  memes?: { cuenta: "alumno" | "sin_cuenta"; activos: boolean; bloqueados: boolean };
+}
+
+export interface EstadoMemes {
+  activos: boolean;
+  bloqueados: boolean;
+  url: string | null;
+  cargando: boolean;
+  alternar: () => void;
 }
 
 interface Comparacion {
@@ -46,7 +61,21 @@ function guardarMejorSesion(v: number) {
   }
 }
 
-export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar, obtenerRecord }: Props) {
+function leerMemesNavegador() {
+  try {
+    return localStorage.getItem(CLAVE_MEMES) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar, obtenerRecord, memes }: Props) {
+  const [memesActivos, setMemesActivos] = useState(memes?.cuenta === "alumno" ? memes.activos && !memes.bloqueados : false);
+  const [memeUrl, setMemeUrl] = useState<string | null>(null);
+  const [memeCargando, setMemeCargando] = useState(false);
+  const memesActivosRef = useRef(memesActivos);
+  const referenciaRef = useRef<number | null>(null); // marca previa con la que se comparó el último intento
+  const ppmFinalRef = useRef<number | null>(null);
   const [aviso, setAviso] = useState<AvisoGuardado | null>(null);
   const [letraErrada, setLetraErrada] = useState(false);
   const [sacudir, setSacudir] = useState(0); // cambia en cada error para reiniciar la animación
@@ -104,11 +133,47 @@ export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar
     setResultado(null);
     setComparacion(null);
     setAviso(null);
+    setMemeUrl(null);
+    ppmFinalRef.current = null;
     setLetraErrada(false);
     cambiarEstado("listo");
     if (areaRef.current) areaRef.current.value = "";
     requestAnimationFrame(() => areaRef.current?.focus());
   }, [duracionSeg]);
+
+  // Sin cuenta, la preferencia de memes se guarda en este navegador.
+  useEffect(() => {
+    if (memes?.cuenta !== "sin_cuenta") return;
+    const v = leerMemesNavegador();
+    memesActivosRef.current = v;
+    setMemesActivos(v);
+  }, [memes?.cuenta]);
+
+  const buscarMeme = useCallback((ppm: number, referencia: number | null) => {
+    setMemeCargando(true);
+    elegirMeme(ppm, referencia)
+      .then((m) => setMemeUrl(m?.url ?? null))
+      .catch(() => setMemeUrl(null))
+      .finally(() => setMemeCargando(false));
+  }, []);
+
+  const alternarMemes = useCallback(() => {
+    if (!memes || memes.bloqueados) return;
+    const nuevo = !memesActivosRef.current;
+    memesActivosRef.current = nuevo;
+    setMemesActivos(nuevo);
+    if (memes.cuenta === "sin_cuenta") {
+      try {
+        localStorage.setItem(CLAVE_MEMES, nuevo ? "1" : "0");
+      } catch {
+        // sin almacenamiento: la preferencia dura solo esta visita
+      }
+    } else {
+      cambiarMisMemes(nuevo).catch(() => {});
+    }
+    if (!nuevo) setMemeUrl(null);
+    else if (ppmFinalRef.current !== null) buscarMeme(ppmFinalRef.current, referenciaRef.current);
+  }, [memes, buscarMeme]);
 
   // El texto se genera en el navegador para que siempre sea distinto.
   useEffect(() => {
@@ -149,6 +214,10 @@ export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar
       recordPrevio: obtenerRecord ? recordRef.current : undefined,
       mejorSesionPrevio: mejorSesionRef.current,
     });
+    // Meme según el resultado frente a la marca anterior (récord, o mejor de la sesión sin cuenta)
+    referenciaRef.current = obtenerRecord ? (recordRef.current ?? null) : mejorSesionRef.current;
+    ppmFinalRef.current = r.ppm;
+    if (memes && !memes.bloqueados && memesActivosRef.current) buscarMeme(r.ppm, referenciaRef.current);
     if (mejorSesionRef.current === null || r.ppm > mejorSesionRef.current) {
       mejorSesionRef.current = r.ppm;
       guardarMejorSesion(r.ppm);
@@ -164,7 +233,7 @@ export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar
         })
         .catch(() => setAviso({ tipo: "error", texto: "No se pudo guardar el resultado." }));
     }
-  }, [duracionSeg, guardar, obtenerRecord]);
+  }, [duracionSeg, guardar, obtenerRecord, memes, buscarMeme]);
 
   // Temporizador
   useEffect(() => {
@@ -309,7 +378,17 @@ export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar
   if (estado === "terminado" && resultado) {
     return (
       <div className="w-full max-w-4xl mx-auto">
-        <PanelResultado r={resultado} comparacion={comparacion} aviso={aviso} onOtraVez={reiniciar} />
+        <PanelResultado
+          r={resultado}
+          comparacion={comparacion}
+          aviso={aviso}
+          onOtraVez={reiniciar}
+          memes={
+            memes
+              ? { activos: memesActivos, bloqueados: memes.bloqueados, url: memeUrl, cargando: memeCargando, alternar: alternarMemes }
+              : undefined
+          }
+        />
       </div>
     );
   }
@@ -461,11 +540,13 @@ function PanelResultado({
   comparacion,
   aviso,
   onOtraVez,
+  memes,
 }: {
   r: Resultado;
   comparacion: Comparacion | null;
   aviso: AvisoGuardado | null;
   onOtraVez: () => void;
+  memes?: EstadoMemes;
 }) {
   const ppm = useContador(r.ppm);
   const precision = useContador(r.precision, 1400, 250);
@@ -510,6 +591,17 @@ function PanelResultado({
 
         <p className="text-lg text-slate-700 mb-6">{mensaje}</p>
 
+        {memes?.activos && (memes.url || memes.cargando) && (
+          <div className="mb-6 flex justify-center">
+            {memes.url ? (
+              // eslint-disable-next-line @next/next/no-img-element -- enlace temporal del bucket privado
+              <img src={memes.url} alt="Meme según tu resultado" className="max-h-72 max-w-full rounded-2xl border border-slate-200 shadow-sm animate-aparecer" />
+            ) : (
+              <div className="h-40 w-64 rounded-2xl bg-slate-100 animate-pulse" aria-label="Cargando meme" />
+            )}
+          </div>
+        )}
+
         {aviso && (
           <p className={`text-sm border rounded-xl px-4 py-2 mb-6 inline-flex items-center gap-2 ${ESTILO_AVISO[aviso.tipo]}`}>
             {aviso.tipo === "cargando" && <Spinner />}
@@ -535,6 +627,23 @@ function PanelResultado({
         Intentar con otro texto
         <kbd className="ml-1 rounded-md bg-white/20 px-1.5 py-0.5 text-xs font-medium">Enter</kbd>
       </button>
+
+      {memes && !memes.bloqueados && (
+        <div className="mt-5">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={memes.activos}
+            onClick={memes.alternar}
+            className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700"
+          >
+            <span className={`relative h-5 w-9 rounded-full transition-colors ${memes.activos ? "bg-lago-600" : "bg-slate-300"}`}>
+              <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${memes.activos ? "translate-x-4" : ""}`} />
+            </span>
+            Memes {memes.activos ? "activados" : "desactivados"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -15,6 +15,7 @@ export default async function Encabezado() {
           { href: "/admin/alumnos", texto: "Alumnos" },
           { href: "/admin/mediciones", texto: "Mediciones" },
           { href: "/admin/revision", texto: "Revisión" },
+          { href: "/admin/memes", texto: "Memes" },
           { href: "/", texto: "Prueba" },
         ]
       : perfil?.rol === "alumno"
