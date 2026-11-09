@@ -187,6 +187,26 @@ export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar
     return () => document.removeEventListener("visibilitychange", alSalir);
   }, []);
 
+  // Mientras corre el tiempo no se puede recargar la página (F5, Ctrl/Cmd + R)
+  // y, si se intenta salir o recargar desde el navegador, se pide confirmación.
+  useEffect(() => {
+    if (estado !== "escribiendo") return;
+    const alTeclaVentana = (e: KeyboardEvent) => {
+      const recargar = e.key === "F5" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "r");
+      if (recargar) e.preventDefault();
+    };
+    const antesDeSalir = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("keydown", alTeclaVentana, true);
+    window.addEventListener("beforeunload", antesDeSalir);
+    return () => {
+      window.removeEventListener("keydown", alTeclaVentana, true);
+      window.removeEventListener("beforeunload", antesDeSalir);
+    };
+  }, [estado]);
+
   const procesar = (valor: string, tipo?: string) => {
     const area = areaRef.current;
     if (!area) return;
@@ -254,7 +274,8 @@ export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar
     if ((e.ctrlKey || e.metaKey) && ["a", "z", "y", "v"].includes(e.key.toLowerCase())) e.preventDefault();
     if (e.key === "Escape") {
       e.preventDefault();
-      reiniciar();
+      // Una vez que corre el tiempo ya no se puede cambiar de texto.
+      if (estadoRef.current === "listo") reiniciar();
     }
   };
 
@@ -358,8 +379,14 @@ export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar
       </div>
 
       <p className="text-center text-sm text-slate-500 mt-4">
-        {estado === "listo" && "El tiempo empieza cuando escribes la primera letra. Si te equivocas, escribe la letra correcta para avanzar. "}
-        Pulsa <kbd className="px-1.5 py-0.5 bg-slate-200 rounded text-xs">Esc</kbd> para cambiar de texto.
+        {estado === "listo" ? (
+          <>
+            El tiempo empieza cuando escribes la primera letra. Si te equivocas, escribe la letra correcta para avanzar. Pulsa{" "}
+            <kbd className="px-1.5 py-0.5 bg-slate-200 rounded text-xs">Esc</kbd> para cambiar de texto.
+          </>
+        ) : (
+          "La prueba está en curso: no se puede cambiar de texto hasta que termine el tiempo."
+        )}
       </p>
     </div>
   );
