@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import { importarNotasMedicion, prepararMedicionHistorica, type ResultadoImportacion } from "@/app/admin/acciones";
 import { leerLibroMediciones, type HojaMedicion } from "@/lib/leerMedicionExcel";
 import Spinner from "@/components/ui/Spinner";
+import { mensajeError } from "@/lib/errores";
 
 const TANDA = 20;
 
@@ -88,7 +89,7 @@ export default function ImportarMedicion() {
         }
       }
     } catch (e) {
-      setFallo(e instanceof Error ? e.message : String(e));
+      setFallo(mensajeError(e));
     } finally {
       setProgreso(null);
     }

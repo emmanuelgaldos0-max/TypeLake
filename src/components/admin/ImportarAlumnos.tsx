@@ -4,6 +4,7 @@ import { useState } from "react";
 import * as XLSX from "xlsx";
 import { crearAlumnos, type FilaAlumno, type ResultadoAlumno } from "@/app/admin/acciones";
 import Spinner from "@/components/ui/Spinner";
+import { mensajeError } from "@/lib/errores";
 
 const TANDA = 20;
 
@@ -79,7 +80,7 @@ export default function ImportarAlumnos() {
       }
       setFilas([]);
     } catch (e) {
-      setFallo(e instanceof Error ? e.message : String(e));
+      setFallo(mensajeError(e));
     } finally {
       setProgreso(null);
     }

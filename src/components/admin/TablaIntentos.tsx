@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { revisarIntento } from "@/app/admin/acciones";
 import Spinner from "@/components/ui/Spinner";
+import { mensajeError } from "@/lib/errores";
 import { fechaHora } from "@/lib/estadisticas";
 
 export interface FilaIntento {
@@ -49,7 +50,7 @@ export default function TablaIntentos({ filas, mostrarAlumno = false, vacio }: {
       setEstados((e) => ({ ...e, [f.id]: decision }));
       router.refresh();
     } catch (e) {
-      alert(e instanceof Error ? e.message : String(e));
+      alert(mensajeError(e));
     } finally {
       setOcupado(null);
     }

@@ -5,6 +5,7 @@ import { useMemo, useState, useTransition } from "react";
 import * as XLSX from "xlsx";
 import { cambiarActivo, generarClaves, listarCredenciales, restablecerClave, type FilaCredencial } from "@/app/admin/acciones";
 import Spinner from "@/components/ui/Spinner";
+import { mensajeError } from "@/lib/errores";
 
 export interface FilaTabla {
   id: string;
@@ -112,7 +113,7 @@ export default function TablaAlumnos({ filas }: { filas: FilaTabla[] }) {
       const sufijo = salon === "todos" ? "todos" : salon.replace(/[^a-zA-Z0-9]+/g, "_");
       descargarExcel(lista, `credenciales_${sufijo}.xlsx`);
     } catch (e) {
-      alert(`No se pudieron descargar las credenciales: ${e instanceof Error ? e.message : e}`);
+      alert(`No se pudieron descargar las credenciales: ${mensajeError(e)}`);
     } finally {
       setOcupado(null);
       setProgreso("");

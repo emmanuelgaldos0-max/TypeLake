@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { eliminarFormula, guardarFormula } from "@/app/admin/acciones";
 import Spinner from "@/components/ui/Spinner";
+import { mensajeError } from "@/lib/errores";
 import { describirFormula, type Formula, type TipoFormula } from "@/lib/estadisticas";
 
 const VACIA: Omit<Formula, "id"> = {
@@ -50,7 +51,7 @@ export default function EditorFormulas({
       onElegir(id);
       setEditando(VACIA);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(mensajeError(e));
     } finally {
       setGuardando(false);
     }
