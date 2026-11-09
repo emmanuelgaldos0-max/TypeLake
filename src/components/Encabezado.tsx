@@ -14,6 +14,12 @@ export default async function Encabezado() {
         </Link>
 
         <nav className="flex items-center gap-4 text-sm">
+          {perfil?.rol === "alumno" && (
+            <>
+              <Link href="/" className="text-slate-600 hover:text-sky-700">Practicar</Link>
+              <Link href="/progreso" className="text-slate-600 hover:text-sky-700">Mi progreso</Link>
+            </>
+          )}
           {perfil?.rol === "admin" && (
             <>
               <Link href="/admin" className="text-slate-600 hover:text-sky-700">Panel</Link>

@@ -484,39 +484,24 @@ function Comparativa({ ppm, c }: { ppm: number; c: Comparacion }) {
   const record = c.recordPrevio == null ? null : Math.round(c.recordPrevio);
   const sesion = c.mejorSesionPrevio;
 
+  const destacado = "bg-amber-50 border-amber-300 text-amber-800";
+  const neutro = "bg-slate-50 border-slate-200 text-slate-700";
+
   let titular: { texto: string; estilo: string } | null = null;
   if (c.recordPrevio !== undefined) {
     if (record === null) titular = { texto: "🎉 ¡Tu primer resultado registrado!", estilo: "bg-sky-50 border-sky-200 text-sky-800" };
-    else if (ppm > record)
-      titular = { texto: `🏆 ¡Nuevo récord personal! Superaste tu marca anterior por ${ppm - record} ppm.`, estilo: "bg-amber-50 border-amber-300 text-amber-800" };
-    else if (ppm === record) titular = { texto: "¡Igualaste tu récord personal!", estilo: "bg-sky-50 border-sky-200 text-sky-800" };
-    else titular = { texto: `Te faltaron ${record - ppm} ppm para alcanzar tu récord.`, estilo: "bg-slate-50 border-slate-200 text-slate-700" };
-  } else if (sesion !== null && ppm > sesion) {
-    titular = { texto: `🏆 ¡Tu mejor resultado de esta sesión! Mejoraste ${ppm - sesion} ppm.`, estilo: "bg-amber-50 border-amber-300 text-amber-800" };
+    else if (ppm > record) titular = { texto: `🏆 ¡Nuevo récord personal! Superaste tu marca de ${record} ppm por ${ppm - record}.`, estilo: destacado };
+    else if (ppm === record) titular = { texto: `¡Igualaste tu récord personal de ${record} ppm!`, estilo: "bg-sky-50 border-sky-200 text-sky-800" };
+    else titular = { texto: `Tu récord es ${record} ppm: te faltaron ${record - ppm} para alcanzarlo.`, estilo: neutro };
+  } else if (sesion !== null) {
+    titular =
+      ppm > sesion
+        ? { texto: `🏆 ¡Tu mejor resultado de esta sesión! Mejoraste ${ppm - sesion} ppm.`, estilo: destacado }
+        : { texto: `Tu mejor marca de esta sesión es ${sesion} ppm.`, estilo: neutro };
   }
 
-  return (
-    <div className="mb-6">
-      {titular && <p className={`inline-block border rounded-xl px-4 py-2 font-medium mb-4 ${titular.estilo}`}>{titular.texto}</p>}
-      <div className="flex flex-wrap justify-center gap-3">
-        <Marca etiqueta="Este intento" valor={ppm} destacado />
-        <Marca etiqueta="Mejor de esta sesión" valor={sesion === null ? ppm : Math.max(sesion, ppm)} />
-        {c.recordPrevio !== undefined && <Marca etiqueta="Tu récord anterior" valor={record} />}
-      </div>
-    </div>
-  );
-}
-
-function Marca({ etiqueta, valor, destacado }: { etiqueta: string; valor: number | null; destacado?: boolean }) {
-  return (
-    <div className={`rounded-xl border px-5 py-2 min-w-32 ${destacado ? "border-sky-300 bg-sky-50" : "border-slate-200"}`}>
-      <div className="text-2xl font-bold text-slate-800 tabular-nums">{valor === null ? "—" : `${valor}`}</div>
-      <div className="text-xs text-slate-500">
-        {etiqueta}
-        {valor !== null && " · ppm"}
-      </div>
-    </div>
-  );
+  if (!titular) return null;
+  return <p className={`inline-block border rounded-xl px-4 py-2 font-medium mb-6 ${titular.estilo}`}>{titular.texto}</p>;
 }
 
 function Dato({ etiqueta, valor }: { etiqueta: string; valor: string | number }) {
