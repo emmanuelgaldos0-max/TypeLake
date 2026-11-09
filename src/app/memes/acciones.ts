@@ -6,6 +6,7 @@ import { preferenciaMemes } from "@/lib/memesServidor";
 import { crearClienteAdmin, obtenerSesion } from "@/lib/supabase/server";
 import {
   MAX_BYTES,
+  MAX_MB,
   MAX_PENDIENTES_ALUMNO,
   TIPOS,
   categoriaDe,
@@ -87,7 +88,7 @@ export async function prepararSubidaMeme(tipo: string, bytes: number): Promise<R
   const sesion = await obtenerSesion();
   if (!sesion) return { error: "Inicia sesión para subir memes." };
   if (!TIPOS.includes(tipo)) return { error: "Solo se aceptan imágenes PNG, JPG, WEBP o GIF." };
-  if (!(bytes > 0 && bytes <= MAX_BYTES)) return { error: "La imagen debe pesar como máximo 2 MB." };
+  if (!(bytes > 0 && bytes <= MAX_BYTES)) return { error: `La imagen debe pesar como máximo ${MAX_MB} MB.` };
 
   const db = crearClienteAdmin();
   if (sesion.perfil.rol === "alumno") {

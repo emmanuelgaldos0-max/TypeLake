@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { cambiarMisMemes, retirarMiMeme } from "@/app/memes/acciones";
 import SubirMeme from "@/components/memes/SubirMeme";
-import { describirCriterio, type CriterioMeme } from "@/lib/memes";
+import { MAX_MB, describirCriterio, type CriterioMeme } from "@/lib/memes";
 
 export interface MiMeme {
   id: number;
@@ -71,7 +71,7 @@ export default function MemesAlumno({ activos: inicial, bloqueados, mios }: { ac
 
       <div className="border-t border-slate-100 pt-5">
         <h3 className="font-medium text-slate-800 mb-1">Sube tu propio meme</h3>
-        <p className="text-sm text-slate-500 mb-3">Tu profesor lo revisará; si lo aprueba, les aparecerá a todos. Máximo 2 MB.</p>
+        <p className="text-sm text-slate-500 mb-3">Tu profesor lo revisará; si lo aprueba, les aparecerá a todos. Imágenes o GIF de máximo {MAX_MB} MB.</p>
         <SubirMeme esAdmin={false} />
       </div>
 

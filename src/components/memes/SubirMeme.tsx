@@ -6,7 +6,7 @@ import { confirmarSubidaMeme, prepararSubidaMeme } from "@/app/memes/acciones";
 import SelectorCriterio from "@/components/memes/SelectorCriterio";
 import Spinner from "@/components/ui/Spinner";
 import { mensajeError } from "@/lib/errores";
-import { MAX_BYTES, TIPOS, type CriterioMeme } from "@/lib/memes";
+import { MAX_BYTES, MAX_MB, TIPOS, type CriterioMeme } from "@/lib/memes";
 import { crearClienteNavegador } from "@/lib/supabase/client";
 
 /** Subida de un meme. Admin: queda aprobado y puede usar rangos de PPM. Alumno: queda pendiente. */
@@ -26,7 +26,7 @@ export default function SubirMeme({ esAdmin }: { esAdmin: boolean }) {
     if (vista) URL.revokeObjectURL(vista);
     if (!f) return (setArchivo(null), setVista(null));
     if (!TIPOS.includes(f.type)) return setError("Solo se aceptan imágenes PNG, JPG, WEBP o GIF.");
-    if (f.size > MAX_BYTES) return setError("La imagen debe pesar como máximo 2 MB.");
+    if (f.size > MAX_BYTES) return setError(`La imagen debe pesar como máximo ${MAX_MB} MB.`);
     setArchivo(f);
     setVista(URL.createObjectURL(f));
   };

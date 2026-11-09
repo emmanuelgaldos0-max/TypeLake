@@ -14,7 +14,8 @@ export const CATEGORIAS: { valor: CategoriaRecord; texto: string }[] = [
 
 /** "Cerca" = al menos el 90 % de su récord. */
 export const UMBRAL_CERCA = 0.9;
-export const MAX_BYTES = 2 * 1024 * 1024;
+export const MAX_MB = 5; // los GIF animados suelen pesar más de 2 MB
+export const MAX_BYTES = MAX_MB * 1024 * 1024;
 export const TIPOS = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 export const MAX_PENDIENTES_ALUMNO = 5;
 

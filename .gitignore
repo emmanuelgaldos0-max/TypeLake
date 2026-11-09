@@ -42,3 +42,6 @@ next-env.d.ts
 
 # plantilla de variables (sin secretos)
 !.env.example
+
+# Memes iniciales (imágenes de terceros: no se suben a GitHub)
+/memes-iniciales/
