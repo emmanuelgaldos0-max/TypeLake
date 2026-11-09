@@ -11,7 +11,9 @@ export interface Enlace {
 /** Enlaces del menú con el activo resaltado. */
 export default function NavEnlaces({ enlaces }: { enlaces: Enlace[] }) {
   const ruta = usePathname();
-  const activo = (href: string) => (href === "/" || href === "/admin" ? ruta === href : ruta.startsWith(href));
+  // El enlace más específico que coincida con la ruta es el activo
+  const coincide = (href: string) => (href === "/" || href === "/admin" ? ruta === href : ruta === href || ruta.startsWith(href + "/"));
+  const activo = (href: string) => coincide(href);
 
   return (
     <nav className="flex items-center gap-1 overflow-x-auto">

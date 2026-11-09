@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import * as XLSX from "xlsx";
 import { cambiarActivo, generarClaves, listarCredenciales, restablecerClave, type FilaCredencial } from "@/app/admin/acciones";
@@ -172,7 +173,9 @@ export default function TablaAlumnos({ filas }: { filas: FilaTabla[] }) {
                     <span className="chip">{f.salon}</span>
                   </td>
                   <td className="py-2.5 pr-3 text-slate-800">
-                    <span className="font-medium">{f.apellidos}</span>, {f.nombres}
+                    <Link href={`/admin/alumnos/${f.id}`} className="hover:text-lago-700 hover:underline">
+                      <span className="font-medium">{f.apellidos}</span>, {f.nombres}
+                    </Link>
                   </td>
                   <td className="py-2.5 pr-3 font-mono text-slate-600">{f.usuario}</td>
                   <td className="py-2.5 pr-3">

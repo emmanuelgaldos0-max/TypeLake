@@ -11,8 +11,10 @@ export default async function Encabezado() {
     perfil?.rol === "admin"
       ? [
           { href: "/admin", texto: "Panel" },
+          { href: "/admin/resultados", texto: "Resultados" },
           { href: "/admin/alumnos", texto: "Alumnos" },
           { href: "/admin/mediciones", texto: "Mediciones" },
+          { href: "/admin/revision", texto: "Revisión" },
           { href: "/", texto: "Prueba" },
         ]
       : perfil?.rol === "alumno"

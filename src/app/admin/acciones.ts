@@ -336,3 +336,62 @@ export async function importarNotasMedicion(
   revalidatePath("/admin/alumnos");
   return resultados;
 }
+
+// ───────────────────────── Fórmulas de promedio ─────────────────────────
+
+export interface DatosFormula {
+  id?: number;
+  nombre: string;
+  tipo: "general" | "mejores_peores" | "top" | "mediana";
+  mejores: number | null;
+  peores: number | null;
+  fuente: "mediciones" | "todo";
+  medicion_id: number | null;
+  sin_intentos: "ignorar" | "cero";
+  visible_alumnos: boolean;
+}
+
+/** Crea o actualiza una fórmula y devuelve su id. */
+export async function guardarFormula(f: DatosFormula): Promise<number> {
+  await exigirAdmin();
+  const db = crearClienteAdmin();
+  const nombre = limpiar(f.nombre);
+  if (!nombre) throw new Error("Ponle un nombre a la fórmula");
+  const fila = {
+    nombre,
+    tipo: f.tipo,
+    mejores: f.tipo === "top" || f.tipo === "mejores_peores" ? Math.max(0, Math.floor(f.mejores ?? 0)) : null,
+    peores: f.tipo === "mejores_peores" ? Math.max(0, Math.floor(f.peores ?? 0)) : null,
+    fuente: f.fuente,
+    medicion_id: f.fuente === "mediciones" ? f.medicion_id : null,
+    sin_intentos: f.sin_intentos,
+    visible_alumnos: f.visible_alumnos,
+  };
+  const { data, error } = f.id
+    ? await db.from("formulas_promedio").update(fila).eq("id", f.id).select("id").single()
+    : await db.from("formulas_promedio").insert(fila).select("id").single();
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/resultados");
+  return data.id as number;
+}
+
+export async function eliminarFormula(id: number) {
+  await exigirAdmin();
+  const { error } = await crearClienteAdmin().from("formulas_promedio").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/resultados");
+}
+
+// ───────────────────────── Revisión de intentos ─────────────────────────
+
+/** Aprueba (cuenta para récords y promedios) o rechaza (no cuenta) un intento. */
+export async function revisarIntento(intentoId: number, decision: "aprobado" | "rechazado") {
+  const sesion = await exigirAdmin();
+  const { error } = await crearClienteAdmin()
+    .from("intentos")
+    .update({ estado: decision, revisado_por: sesion.perfil.id, revisado_en: new Date().toISOString() })
+    .eq("id", intentoId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/revision");
+  revalidatePath("/admin");
+}

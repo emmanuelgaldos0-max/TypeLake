@@ -36,12 +36,15 @@ export default async function PanelAdmin() {
     {
       titulo: "Intentos en revisión",
       valor: sospechosos,
+      href: "/admin/revision",
       icono: ICONOS.revision,
       color: sospechosos > 0 ? "bg-amber-50 text-amber-600" : "bg-slate-100 text-slate-500",
     },
   ];
 
   const accesos = [
+    { href: "/admin/resultados", titulo: "Resultados y rankings", texto: "Ranking de salones con tus fórmulas, promedios por grado, alumnos y exportación a Excel." },
+    { href: "/admin/revision", titulo: "Revisar intentos", texto: "Aprueba o rechaza los intentos que el antitrampas marcó como sospechosos." },
     { href: "/admin/alumnos", titulo: "Alumnos y credenciales", texto: "Importa alumnos, descarga usuarios y contraseñas, restablece claves." },
     { href: "/admin/mediciones", titulo: "Mediciones", texto: "Importa los resultados de las mediciones tomadas en el colegio." },
     { href: "/", titulo: "Probar la prueba", texto: "Haz una prueba de 1 minuto como la verán los alumnos." },
@@ -91,7 +94,7 @@ export default async function PanelAdmin() {
       </div>
 
       <p className="text-sm text-slate-400">
-        Próximamente: dashboards por alumno, salón y grado; mediciones en vivo con código; fórmulas de promedio; revisión de intentos y exportación a Excel.
+        Próximamente: mediciones en vivo con código de clase y edición del banco de textos.
       </p>
     </div>
   );
