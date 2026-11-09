@@ -13,6 +13,7 @@ export default async function Encabezado() {
           { href: "/admin", texto: "Panel" },
           { href: "/admin/resultados", texto: "Resultados" },
           { href: "/admin/alumnos", texto: "Alumnos" },
+          { href: "/admin/recientes", texto: "Recientes" },
           { href: "/admin/mediciones", texto: "Mediciones" },
           { href: "/admin/revision", texto: "Revisión" },
           { href: "/admin/memes", texto: "Memes" },

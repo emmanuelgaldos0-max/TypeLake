@@ -36,7 +36,7 @@ export default async function PanelAdmin() {
   const tarjetas = [
     { titulo: "Alumnos activos", valor: alumnos, href: "/admin/alumnos", icono: ICONOS.alumnos, color: "bg-lago-50 text-lago-600" },
     { titulo: "Salones", valor: salones, href: "/admin/alumnos", icono: ICONOS.salones, color: "bg-violet-50 text-violet-600" },
-    { titulo: "Intentos registrados", valor: intentos, href: "/admin/mediciones", icono: ICONOS.intentos, color: "bg-emerald-50 text-emerald-600" },
+    { titulo: "Intentos registrados", valor: intentos, href: "/admin/recientes", icono: ICONOS.intentos, color: "bg-emerald-50 text-emerald-600" },
     {
       titulo: "Intentos en revisión",
       valor: sospechosos,
@@ -48,6 +48,7 @@ export default async function PanelAdmin() {
 
   const accesos = [
     { href: "/admin/resultados", titulo: "Resultados y rankings", texto: "Ranking de salones con tus fórmulas, promedios por grado, alumnos y exportación a Excel." },
+    { href: "/admin/recientes", titulo: "Intentos recientes", texto: "Los alumnos que acaban de hacer una prueba; entra a cada uno para ver sus intentos." },
     { href: "/admin/revision", titulo: "Revisar intentos", texto: "Aprueba o rechaza los intentos que el antitrampas marcó como sospechosos." },
     { href: "/admin/alumnos", titulo: "Alumnos y credenciales", texto: "Importa alumnos, descarga usuarios y contraseñas, restablece claves." },
     { href: "/admin/mediciones", titulo: "Mediciones", texto: "Importa los resultados de las mediciones tomadas en el colegio." },
