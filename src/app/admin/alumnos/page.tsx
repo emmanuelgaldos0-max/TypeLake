@@ -6,7 +6,7 @@ export default async function PaginaAlumnos() {
   const db = await crearClienteServidor();
   const { data } = await db
     .from("perfiles")
-    .select("id, usuario, nombres, apellidos, activo, salones(seccion, grados(nombre, orden))")
+    .select("id, usuario, nombres, apellidos, activo, salon_id, salones(seccion, grados(nombre, orden))")
     .eq("rol", "alumno");
 
   type Salon = { seccion: string; grados: { nombre: string; orden: number } | null } | null;
@@ -20,6 +20,7 @@ export default async function PaginaAlumnos() {
         apellidos: p.apellidos as string,
         activo: p.activo as boolean,
         salon: s ? `${s.grados?.nombre ?? ""} ${s.seccion}` : "Sin salón",
+        salonId: (p.salon_id as number | null) ?? null,
         orden: (s?.grados?.orden ?? 99) * 100 + (s?.seccion.charCodeAt(0) ?? 0),
       };
     })
@@ -28,11 +29,11 @@ export default async function PaginaAlumnos() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-slate-800">Alumnos</h1>
-        <p className="text-slate-500 text-sm mt-1">Crea las cuentas desde un Excel y entrega a cada alumno su usuario y contraseña.</p>
+        <h1 className="titulo-pagina">Alumnos</h1>
+        <p className="subtitulo">Crea las cuentas desde un Excel y entrega a cada alumno su usuario y contraseña.</p>
       </div>
-      <ImportarAlumnos />
       <TablaAlumnos filas={filas} />
+      <ImportarAlumnos />
     </div>
   );
 }

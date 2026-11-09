@@ -43,7 +43,7 @@ export default function RankingAlumnos() {
   const visibles = (filas ?? []).filter((f) => !(fueraDelTop && f.soy_yo));
 
   return (
-    <section className="bg-white rounded-2xl border border-slate-200 p-6">
+    <section className="tarjeta p-6 animate-aparecer">
       <h2 className="font-semibold text-slate-800">¿Cómo vas frente a los demás?</h2>
       <p className="text-sm text-slate-500 mb-4">Mejor resultado válido de cada alumno, en palabras por minuto.</p>
 

@@ -43,7 +43,7 @@ export default function PromedioSalones({ formulas, miSalon }: { formulas: { id:
   const posMiSalon = conDatos.findIndex((f) => f.salon_id === miSalon);
 
   return (
-    <section className="bg-white rounded-2xl border border-slate-200 p-6">
+    <section className="tarjeta p-6 animate-aparecer">
       <h2 className="font-semibold text-slate-800">Promedio por salón</h2>
       <p className="text-sm text-slate-500 mb-4">
         {posMiSalon >= 0 ? `Tu salón va en el puesto ${posMiSalon + 1} de ${conDatos.length}.` : "Así van los salones del colegio."}

@@ -1,28 +1,112 @@
 @import "tailwindcss";
 
+/* ═══════════════════════ Identidad visual de TypeLake ═══════════════════════
+   Azul "lago" como color principal (el mismo de las gráficas), naranja como
+   acento para destacar al propio alumno, tinta pizarra para el texto.        */
+
+@theme {
+  --color-lago-50: #eef5fd;
+  --color-lago-100: #d8e8fb;
+  --color-lago-200: #b7d3f6;
+  --color-lago-300: #86b6ef;
+  --color-lago-400: #5598e7;
+  --color-lago-500: #2a78d6;
+  --color-lago-600: #1f63b8;
+  --color-lago-700: #184f95;
+  --color-lago-800: #133f77;
+  --color-lago-900: #0d2c55;
+  --color-acento-500: #eb6834;
+  --color-acento-50: #fff3ec;
+
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --animate-aparecer: aparecer 0.35s ease-out both;
+  --animate-brillo: brillo 1.4s ease-in-out infinite;
+}
+
 :root {
-  --background: #f8fafc;
+  --background: #f6f8fb;
   --foreground: #0f172a;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+body {
+  background:
+    radial-gradient(1200px 500px at 10% -10%, #dcebfd 0%, transparent 60%),
+    radial-gradient(900px 400px at 100% 0%, #fde9de 0%, transparent 55%),
+    var(--background);
+  background-attachment: fixed;
+  color: var(--foreground);
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+@layer components {
+  .tarjeta {
+    @apply rounded-2xl border border-slate-200/70 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_10px_30px_-18px_rgba(15,23,42,0.18)];
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-150 select-none active:scale-[0.97] disabled:pointer-events-none disabled:opacity-60;
+  }
+  .btn-primario {
+    @apply bg-lago-600 text-white shadow-sm shadow-lago-600/30 hover:bg-lago-700 hover:shadow-md hover:shadow-lago-600/30;
+  }
+  .btn-secundario {
+    @apply border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50;
+  }
+  .btn-exito {
+    @apply bg-emerald-600 text-white shadow-sm shadow-emerald-600/30 hover:bg-emerald-700;
+  }
+  .btn-enlace {
+    @apply inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-medium text-lago-700 transition hover:bg-lago-50 disabled:opacity-50;
+  }
+  .campo {
+    @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 transition placeholder:text-slate-400 focus:border-lago-400 focus:outline-none focus:ring-4 focus:ring-lago-100;
+  }
+  .etiqueta {
+    @apply mb-1 block text-sm font-medium text-slate-600;
+  }
+  .titulo-pagina {
+    @apply text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl;
+  }
+  .subtitulo {
+    @apply mt-1 text-sm text-slate-500;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600;
+  }
+  /* Tecla decorativa, usada en el logo y en la portada */
+  .tecla {
+    @apply inline-grid place-items-center rounded-lg border border-slate-300 bg-gradient-to-b from-white to-slate-100 font-bold text-slate-700 shadow-[0_3px_0_0_#cbd5e1];
+  }
+  .esqueleto {
+    @apply animate-brillo rounded-lg bg-[linear-gradient(90deg,#eef2f7_0%,#f8fafc_50%,#eef2f7_100%)] bg-[length:200%_100%];
+  }
+}
+
+@keyframes aparecer {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes brillo {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
 }
 
 /* Letra actual: fondo suave y una barra que parpadea a la izquierda */
 .cursor-letra {
-  background: #e0f2fe;
-  color: #0369a1;
-  border-radius: 2px;
+  background: var(--color-lago-50);
+  color: var(--color-lago-700);
+  border-radius: 3px;
   animation: parpadeo 1s steps(2, start) infinite;
 }
 
@@ -31,7 +115,7 @@ body {
   display: inline-block;
   background: #fecdd3;
   color: #be123c;
-  border-radius: 2px;
+  border-radius: 3px;
   box-shadow: inset 2px 0 0 #e11d48;
   animation: sacudir 0.18s ease-in-out;
 }
@@ -52,9 +136,28 @@ body {
 @keyframes parpadeo {
   0%,
   100% {
-    box-shadow: inset 2px 0 0 #0284c7;
+    box-shadow: inset 2px 0 0 var(--color-lago-600);
   }
   50% {
     box-shadow: inset 2px 0 0 transparent;
+  }
+}
+
+/* Barra de carga superior entre páginas */
+@keyframes avance {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(0.85);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }

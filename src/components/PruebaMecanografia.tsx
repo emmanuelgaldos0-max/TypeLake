@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { generarTexto } from "@/lib/generarTexto";
 import { calcularPpm, contarCorrectos, variacionRitmo, type Resultado } from "@/lib/metricas";
+import Spinner from "@/components/ui/Spinner";
 
 type Estado = "listo" | "escribiendo" | "terminado";
 
@@ -297,22 +298,14 @@ export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar
   return (
     <div className="w-full max-w-4xl mx-auto">
       {/* Solo el tiempo: la velocidad y la precisión se revelan al final */}
-      <div className="flex justify-center mb-4">
-        <div className={`rounded-xl px-8 py-3 text-center border ${urgente ? "bg-rose-50 border-rose-200" : "bg-white border-slate-200"}`}>
-          <div className={`text-4xl font-bold tabular-nums ${urgente ? "text-rose-600" : "text-slate-800"}`}>{Math.ceil(restante)} s</div>
-          <div className="text-xs uppercase tracking-wide text-slate-500 mt-1">Tiempo</div>
-        </div>
-      </div>
-
-      {/* Barra de tiempo */}
-      <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden mb-4">
-        <div className="h-full bg-sky-500 transition-[width] duration-100 ease-linear" style={{ width: `${(restante / duracionSeg) * 100}%` }} />
+      <div className="flex justify-center mb-5">
+        <AnilloTiempo restante={restante} total={duracionSeg} urgente={urgente} />
       </div>
 
       <div
         onClick={() => areaRef.current?.focus()}
-        className={`relative bg-white rounded-2xl border-2 px-6 py-5 cursor-text transition ${
-          enfocado ? "border-sky-400 shadow-lg shadow-sky-100" : "border-slate-200"
+        className={`tarjeta relative px-6 sm:px-8 py-6 cursor-text transition-all duration-200 ${
+          enfocado ? "border-lago-300 ring-4 ring-lago-100" : ""
         }`}
       >
         <textarea
@@ -358,8 +351,8 @@ export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar
           </div>
         </div>
         {!enfocado && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white/70 rounded-2xl backdrop-blur-[1px]">
-            <span className="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm">Haz clic aquí para empezar</span>
+          <div className="absolute inset-0 flex items-center justify-center bg-white/35 rounded-2xl animate-aparecer">
+            <span className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-medium shadow-lg">Haz clic aquí para empezar</span>
           </div>
         )}
       </div>
@@ -368,6 +361,39 @@ export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar
         {estado === "listo" && "El tiempo empieza cuando escribes la primera letra. Si te equivocas, escribe la letra correcta para avanzar. "}
         Pulsa <kbd className="px-1.5 py-0.5 bg-slate-200 rounded text-xs">Esc</kbd> para cambiar de texto.
       </p>
+    </div>
+  );
+}
+
+/** Segundos restantes dentro de un anillo que se va vaciando. */
+function AnilloTiempo({ restante, total, urgente }: { restante: number; total: number; urgente: boolean }) {
+  const r = 42;
+  const circ = 2 * Math.PI * r;
+  const fraccion = Math.max(0, restante / total);
+  const color = urgente ? "#e11d48" : "var(--color-lago-500)";
+  return (
+    <div className={`relative h-28 w-28 ${urgente ? "animate-pulse" : ""}`} role="timer" aria-label={`${Math.ceil(restante)} segundos restantes`}>
+      <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
+        <circle cx="50" cy="50" r={r} fill="white" stroke="#e2e8f0" strokeWidth="7" />
+        <circle
+          cx="50"
+          cy="50"
+          r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth="7"
+          strokeLinecap="round"
+          strokeDasharray={circ}
+          strokeDashoffset={circ * (1 - fraccion)}
+          style={{ transition: "stroke-dashoffset 0.1s linear, stroke 0.3s" }}
+        />
+      </svg>
+      <div className="absolute inset-0 grid place-items-center text-center">
+        <div>
+          <div className={`text-3xl font-extrabold tabular-nums leading-none ${urgente ? "text-rose-600" : "text-slate-900"}`}>{Math.ceil(restante)}</div>
+          <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mt-1">segundos</div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -429,20 +455,20 @@ function PanelResultado({
   if (r.precision < 90) mensaje += " Intenta ir un poco más despacio para cometer menos errores.";
 
   return (
-    <div className="bg-white rounded-2xl border-2 border-slate-200 p-8 text-center">
-      <div className="text-sm uppercase tracking-wide text-slate-500 mb-2">Tu resultado</div>
+    <div className="tarjeta p-8 sm:p-10 text-center animate-aparecer">
+      <div className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-4">Tu resultado</div>
 
-      <div className="grid grid-cols-2 gap-4 max-w-lg mx-auto mb-6">
-        <div>
-          <div className="text-7xl font-extrabold text-sky-600 tabular-nums">{Math.round(ppm.valor)}</div>
-          <div className="text-slate-600">palabras por minuto</div>
+      <div className="grid grid-cols-2 gap-4 max-w-xl mx-auto mb-6">
+        <div className="rounded-2xl bg-lago-50 py-6">
+          <div className="text-6xl sm:text-7xl font-extrabold text-lago-600 tabular-nums tracking-tight">{Math.round(ppm.valor)}</div>
+          <div className="text-slate-600 font-medium mt-1">palabras por minuto</div>
         </div>
-        <div>
-          <div className="text-7xl font-extrabold text-emerald-600 tabular-nums">
+        <div className="rounded-2xl bg-emerald-50 py-6">
+          <div className="text-6xl sm:text-7xl font-extrabold text-emerald-600 tabular-nums tracking-tight">
             {precision.valor.toFixed(Number.isInteger(r.precision) ? 0 : 1)}
             <span className="text-4xl">%</span>
           </div>
-          <div className="text-slate-600">precisión</div>
+          <div className="text-slate-600 font-medium mt-1">precisión</div>
         </div>
       </div>
 
@@ -457,7 +483,12 @@ function PanelResultado({
 
         <p className="text-lg text-slate-700 mb-6">{mensaje}</p>
 
-        {aviso && <p className={`text-sm border rounded-lg px-4 py-2 mb-6 inline-block ${ESTILO_AVISO[aviso.tipo]}`}>{aviso.texto}</p>}
+        {aviso && (
+          <p className={`text-sm border rounded-xl px-4 py-2 mb-6 inline-flex items-center gap-2 ${ESTILO_AVISO[aviso.tipo]}`}>
+            {aviso.tipo === "cargando" && <Spinner />}
+            {aviso.texto}
+          </p>
+        )}
 
         {peores.length > 0 && (
           <div className="mb-6">
@@ -473,8 +504,9 @@ function PanelResultado({
         )}
       </div>
 
-      <button onClick={onOtraVez} autoFocus className="px-6 py-3 bg-sky-600 hover:bg-sky-700 text-white font-semibold rounded-xl shadow transition">
+      <button onClick={onOtraVez} autoFocus className="btn btn-primario px-6 py-3 text-base">
         Intentar con otro texto
+        <kbd className="ml-1 rounded-md bg-white/20 px-1.5 py-0.5 text-xs font-medium">Enter</kbd>
       </button>
     </div>
   );
@@ -489,9 +521,9 @@ function Comparativa({ ppm, c }: { ppm: number; c: Comparacion }) {
 
   let titular: { texto: string; estilo: string } | null = null;
   if (c.recordPrevio !== undefined) {
-    if (record === null) titular = { texto: "🎉 ¡Tu primer resultado registrado!", estilo: "bg-sky-50 border-sky-200 text-sky-800" };
+    if (record === null) titular = { texto: "🎉 ¡Tu primer resultado registrado!", estilo: "bg-lago-50 border-lago-200 text-lago-800" };
     else if (ppm > record) titular = { texto: `🏆 ¡Nuevo récord personal! Superaste tu marca de ${record} ppm por ${ppm - record}.`, estilo: destacado };
-    else if (ppm === record) titular = { texto: `¡Igualaste tu récord personal de ${record} ppm!`, estilo: "bg-sky-50 border-sky-200 text-sky-800" };
+    else if (ppm === record) titular = { texto: `¡Igualaste tu récord personal de ${record} ppm!`, estilo: "bg-lago-50 border-lago-200 text-lago-800" };
     else titular = { texto: `Tu récord es ${record} ppm: te faltaron ${record - ppm} para alcanzarlo.`, estilo: neutro };
   } else if (sesion !== null) {
     titular =
@@ -506,7 +538,7 @@ function Comparativa({ ppm, c }: { ppm: number; c: Comparacion }) {
 
 function Dato({ etiqueta, valor }: { etiqueta: string; valor: string | number }) {
   return (
-    <div className="rounded-xl bg-slate-50 px-3 py-3">
+    <div className="rounded-xl border border-slate-100 bg-slate-50/70 px-3 py-3">
       <div className="text-2xl font-bold text-slate-800 tabular-nums">{valor}</div>
       <div className="text-xs text-slate-500">{etiqueta}</div>
     </div>

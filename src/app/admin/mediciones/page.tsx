@@ -25,11 +25,11 @@ export default async function PaginaMediciones() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-slate-800">Mediciones</h1>
-        <p className="text-slate-500 text-sm mt-1">Pruebas oficiales tomadas en el colegio. Por ahora puedes importar las que ya tienes en Excel.</p>
+        <h1 className="titulo-pagina">Mediciones</h1>
+        <p className="subtitulo">Pruebas oficiales tomadas en el colegio. Por ahora puedes importar las que ya tienes en Excel.</p>
       </div>
 
-      <section className="bg-white rounded-2xl border border-slate-200 p-6">
+      <section className="tarjeta p-6 animate-aparecer">
         <h2 className="text-lg font-semibold text-slate-800 mb-4">Mediciones registradas</h2>
         {resumen.length === 0 ? (
           <p className="text-sm text-slate-500">Todavía no hay mediciones.</p>

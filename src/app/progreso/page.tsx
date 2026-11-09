@@ -70,10 +70,10 @@ export default async function PaginaProgreso() {
     <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-8 space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Mi progreso</h1>
+          <h1 className="titulo-pagina">Mi progreso</h1>
           <p className="text-slate-500 text-sm">Así vas mejorando, {sesion.perfil.nombres.split(" ")[0]}.</p>
         </div>
-        <Link href="/" className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold">
+        <Link href="/" className="btn btn-primario">
           Practicar ahora
         </Link>
       </div>
@@ -87,7 +87,7 @@ export default async function PaginaProgreso() {
       </section>
 
       {/* Evolución */}
-      <section className="bg-white rounded-2xl border border-slate-200 p-6">
+      <section className="tarjeta p-6 animate-aparecer">
         <h2 className="font-semibold text-slate-800">Tu velocidad prueba a prueba</h2>
         <p className="text-sm text-slate-500 mb-4">Palabras por minuto en tus últimas {puntos.length} pruebas válidas.</p>
         {puntos.length >= 2 ? (
@@ -98,7 +98,7 @@ export default async function PaginaProgreso() {
       </section>
 
       {/* Teclas */}
-      <section className="bg-white rounded-2xl border border-slate-200 p-6">
+      <section className="tarjeta p-6 animate-aparecer">
         <h2 className="font-semibold text-slate-800">Teclas que más se te complican</h2>
         <p className="text-sm text-slate-500 mb-4">Errores acumulados en tus últimas 30 pruebas. Practica estas letras con calma.</p>
         {teclas.length ? (
@@ -128,7 +128,7 @@ export default async function PaginaProgreso() {
 
 function Tarjeta({ titulo, valor, unidad, nota }: { titulo: string; valor: string | number; unidad?: string; nota?: string }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-5">
+    <div className="tarjeta p-5">
       <div className="text-sm text-slate-500">{titulo}</div>
       <div className="mt-1 text-3xl font-bold text-slate-800">
         {valor}

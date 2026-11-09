@@ -82,6 +82,7 @@ async function contextoAlumnos(db: SupabaseClient) {
     if (error) throw new Error(error.message);
     usados.add(usuario);
     alumnoPorClave.set(claveAlumno(nombres, apellidos, salon), data.user.id);
+    await guardarClave(db, data.user.id, clave);
     return { id: data.user.id, usuario, clave };
   };
 
@@ -120,6 +121,11 @@ export async function crearAlumnos(filas: FilaAlumno[]): Promise<ResultadoAlumno
   return resultados;
 }
 
+/** Guarda la contraseña vigente para poder volver a descargarla (si la tabla existe). */
+async function guardarClave(db: SupabaseClient, alumnoId: string, clave: string) {
+  await db.from("credenciales").upsert({ alumno_id: alumnoId, clave, actualizado_en: new Date().toISOString() });
+}
+
 /** Genera una contraseña nueva para un alumno y la devuelve para entregársela. */
 export async function restablecerClave(alumnoId: string): Promise<string> {
   await exigirAdmin();
@@ -127,7 +133,73 @@ export async function restablecerClave(alumnoId: string): Promise<string> {
   const clave = generarClave();
   const { error } = await db.auth.admin.updateUserById(alumnoId, { password: clave });
   if (error) throw new Error(error.message);
+  await guardarClave(db, alumnoId, clave);
   return clave;
+}
+
+export interface FilaCredencial {
+  id: string;
+  grado: string;
+  seccion: string;
+  orden: number;
+  apellidos: string;
+  nombres: string;
+  usuario: string;
+  clave: string | null; // null = creada antes de guardar contraseñas
+}
+
+/** Credenciales de los alumnos activos (de un salón, o de todos si salonId es null). */
+export async function listarCredenciales(salonId: number | null): Promise<FilaCredencial[]> {
+  await exigirAdmin();
+  const db = crearClienteAdmin();
+  let q = db
+    .from("perfiles")
+    .select("id, usuario, nombres, apellidos, salon_id, salones(seccion, grados(nombre, orden)), credenciales(clave)")
+    .eq("rol", "alumno")
+    .eq("activo", true);
+  if (salonId !== null) q = q.eq("salon_id", salonId);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+
+  type Fila = {
+    id: string;
+    usuario: string;
+    nombres: string;
+    apellidos: string;
+    salones: { seccion: string; grados: { nombre: string; orden: number } | null } | null;
+    credenciales: { clave: string } | { clave: string }[] | null;
+  };
+  return ((data ?? []) as unknown as Fila[])
+    .map((p) => {
+      const cred = Array.isArray(p.credenciales) ? p.credenciales[0] : p.credenciales;
+      return {
+        id: p.id,
+        grado: p.salones?.grados?.nombre ?? "Sin salón",
+        seccion: p.salones?.seccion ?? "",
+        orden: p.salones?.grados?.orden ?? 999,
+        apellidos: p.apellidos,
+        nombres: p.nombres,
+        usuario: p.usuario,
+        clave: cred?.clave ?? null,
+      };
+    })
+    .sort((a, b) => a.orden - b.orden || a.seccion.localeCompare(b.seccion) || a.apellidos.localeCompare(b.apellidos, "es"));
+}
+
+/** Genera y guarda contraseñas nuevas para varios alumnos (máx. 25 por llamada). */
+export async function generarClaves(alumnoIds: string[]): Promise<Record<string, string>> {
+  await exigirAdmin();
+  if (alumnoIds.length > 25) throw new Error("Máximo 25 alumnos por tanda");
+  const db = crearClienteAdmin();
+  const nuevas: Record<string, string> = {};
+  for (const id of alumnoIds) {
+    const clave = generarClave();
+    const { error } = await db.auth.admin.updateUserById(id, { password: clave });
+    if (error) throw new Error(error.message);
+    await guardarClave(db, id, clave);
+    nuevas[id] = clave;
+  }
+  return nuevas;
 }
 
 /** Activa o desactiva una cuenta de alumno (desactivado = no cuenta en promedios ni rankings). */

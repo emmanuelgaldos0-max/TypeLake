@@ -1,11 +1,13 @@
 ﻿import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Suspense } from "react";
+import { Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import Encabezado from "@/components/Encabezado";
+import BarraCarga from "@/components/ui/BarraCarga";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+const jakarta = Plus_Jakarta_Sans({
+  variable: "--font-jakarta",
+  subsets: ["latin", "latin-ext"],
 });
 
 const geistMono = Geist_Mono({
@@ -29,9 +31,13 @@ export default function RootLayout({
   return (
     // suppressHydrationWarning: extensiones como LanguageTool o Grammarly modifican <html> y causan avisos falsos.
     <html lang="es" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}>
+      <body className={`${jakarta.variable} ${geistMono.variable} font-sans antialiased min-h-screen flex flex-col`}>
+        <Suspense>
+          <BarraCarga />
+        </Suspense>
         <Encabezado />
         <div className="flex-1 flex flex-col">{children}</div>
+        <footer className="py-6 text-center text-xs text-slate-400">TypeLake · Concurso de Mecanografía</footer>
       </body>
     </html>
   );

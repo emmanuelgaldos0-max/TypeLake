@@ -1,45 +1,62 @@
 import Link from "next/link";
+import Logo from "@/components/Logo";
+import NavEnlaces, { type Enlace } from "@/components/NavEnlaces";
 import { obtenerSesion } from "@/lib/supabase/server";
 
 export default async function Encabezado() {
   const sesion = await obtenerSesion();
   const perfil = sesion?.perfil;
 
+  const enlaces: Enlace[] =
+    perfil?.rol === "admin"
+      ? [
+          { href: "/admin", texto: "Panel" },
+          { href: "/admin/alumnos", texto: "Alumnos" },
+          { href: "/admin/mediciones", texto: "Mediciones" },
+          { href: "/", texto: "Prueba" },
+        ]
+      : perfil?.rol === "alumno"
+        ? [
+            { href: "/", texto: "Practicar" },
+            { href: "/progreso", texto: "Mi progreso" },
+          ]
+        : [];
+
+  const iniciales = perfil ? `${perfil.nombres.charAt(0)}${perfil.apellidos.charAt(0)}`.toUpperCase() || "?" : "";
+
   return (
-    <header className="border-b border-slate-200 bg-white">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-xl bg-sky-600 text-white grid place-items-center font-bold">T</div>
-          <span className="text-xl font-bold text-slate-800">TypeLake</span>
+    <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/80 backdrop-blur-md">
+      <div className="max-w-6xl mx-auto px-4 h-16 flex items-center gap-4">
+        <Link href={perfil?.rol === "admin" ? "/admin" : "/"} className="shrink-0" aria-label="Inicio">
+          <Logo />
         </Link>
 
-        <nav className="flex items-center gap-4 text-sm">
-          {perfil?.rol === "alumno" && (
-            <>
-              <Link href="/" className="text-slate-600 hover:text-sky-700">Practicar</Link>
-              <Link href="/progreso" className="text-slate-600 hover:text-sky-700">Mi progreso</Link>
-            </>
-          )}
-          {perfil?.rol === "admin" && (
-            <>
-              <Link href="/admin" className="text-slate-600 hover:text-sky-700">Panel</Link>
-              <Link href="/admin/alumnos" className="text-slate-600 hover:text-sky-700">Alumnos</Link>
-              <Link href="/admin/mediciones" className="text-slate-600 hover:text-sky-700">Mediciones</Link>
-            </>
-          )}
-          {perfil ? (
-            <div className="flex items-center gap-3">
-              <span className="text-slate-700 hidden sm:inline">
-                {perfil.nombres.split(" ")[0]} {perfil.apellidos.split(" ")[0]}
+        <div className="flex-1 min-w-0 flex justify-center">{enlaces.length > 0 && <NavEnlaces enlaces={enlaces} />}</div>
+
+        {perfil ? (
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="hidden sm:flex items-center gap-2">
+              <span
+                className={`grid h-8 w-8 place-items-center rounded-full text-xs font-bold text-white ${perfil.rol === "admin" ? "bg-acento-500" : "bg-lago-600"}`}
+              >
+                {iniciales}
               </span>
-              <form action="/auth/salir" method="post">
-                <button className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">Salir</button>
-              </form>
+              <span className="text-sm leading-tight">
+                <span className="block font-semibold text-slate-800">
+                  {perfil.nombres.split(" ")[0]} {perfil.apellidos.split(" ")[0]}
+                </span>
+                <span className="block text-xs text-slate-500">{perfil.rol === "admin" ? "Administrador" : "Alumno"}</span>
+              </span>
             </div>
-          ) : (
-            <Link href="/login" className="px-3 py-1.5 rounded-lg bg-sky-600 text-white hover:bg-sky-700">Ingresar</Link>
-          )}
-        </nav>
+            <form action="/auth/salir" method="post">
+              <button className="btn btn-secundario px-3 py-1.5">Salir</button>
+            </form>
+          </div>
+        ) : (
+          <Link href="/login" className="btn btn-primario shrink-0 px-4 py-2">
+            Ingresar
+          </Link>
+        )}
       </div>
     </header>
   );

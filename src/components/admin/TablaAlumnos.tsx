@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { cambiarActivo, restablecerClave } from "@/app/admin/acciones";
+import * as XLSX from "xlsx";
+import { cambiarActivo, generarClaves, listarCredenciales, restablecerClave, type FilaCredencial } from "@/app/admin/acciones";
+import Spinner from "@/components/ui/Spinner";
 
 export interface FilaTabla {
   id: string;
@@ -10,14 +12,49 @@ export interface FilaTabla {
   apellidos: string;
   activo: boolean;
   salon: string;
+  salonId: number | null;
   orden: number;
 }
 
+const TANDA = 20;
+
+/** Un Excel con una hoja por salón: Apellidos, Nombres, Usuario, Contraseña. */
+function descargarExcel(filas: FilaCredencial[], nombreArchivo: string) {
+  const libro = XLSX.utils.book_new();
+  const porSalon = new Map<string, FilaCredencial[]>();
+  for (const f of filas) {
+    const k = `${f.grado} ${f.seccion}`.trim();
+    porSalon.set(k, [...(porSalon.get(k) ?? []), f]);
+  }
+  for (const [salon, lista] of porSalon) {
+    const hoja = XLSX.utils.json_to_sheet(
+      lista.map((f, i) => ({
+        "N°": i + 1,
+        Apellidos: f.apellidos,
+        Nombres: f.nombres,
+        Usuario: f.usuario,
+        Contraseña: f.clave ?? "(no guardada)",
+      })),
+    );
+    hoja["!cols"] = [{ wch: 4 }, { wch: 26 }, { wch: 24 }, { wch: 16 }, { wch: 16 }];
+    // Nombre de hoja: máx. 31 caracteres y sin caracteres especiales
+    const nombreHoja = salon.replace(/[\\/?*[\]:]/g, "").slice(0, 31) || "Alumnos";
+    XLSX.utils.book_append_sheet(libro, hoja, nombreHoja);
+  }
+  XLSX.writeFile(libro, nombreArchivo);
+}
+
 export default function TablaAlumnos({ filas }: { filas: FilaTabla[] }) {
-  const salones = useMemo(() => Array.from(new Set(filas.map((f) => f.salon))), [filas]);
+  const salones = useMemo(() => {
+    const m = new Map<string, number | null>();
+    filas.forEach((f) => m.set(f.salon, f.salonId));
+    return Array.from(m, ([nombre, id]) => ({ nombre, id }));
+  }, [filas]);
   const [salon, setSalon] = useState("todos");
   const [buscar, setBuscar] = useState("");
   const [claves, setClaves] = useState<Record<string, string>>({});
+  const [ocupado, setOcupado] = useState<string | null>(null); // id de la fila o "descarga"
+  const [progreso, setProgreso] = useState("");
   const [pendiente, iniciar] = useTransition();
 
   const visibles = filas.filter(
@@ -28,66 +65,136 @@ export default function TablaAlumnos({ filas }: { filas: FilaTabla[] }) {
 
   const nuevaClave = (f: FilaTabla) => {
     if (!confirm(`¿Generar una contraseña nueva para ${f.nombres} ${f.apellidos}? La anterior dejará de funcionar.`)) return;
+    setOcupado(f.id);
     iniciar(async () => {
       const clave = await restablecerClave(f.id);
       setClaves((c) => ({ ...c, [f.id]: clave }));
+      setOcupado(null);
     });
   };
 
   const alternar = (f: FilaTabla) => {
     const accion = f.activo ? "desactivar" : "activar";
     if (!confirm(`¿Seguro que quieres ${accion} a ${f.nombres} ${f.apellidos}?`)) return;
-    iniciar(() => cambiarActivo(f.id, !f.activo));
+    setOcupado(f.id);
+    iniciar(async () => {
+      await cambiarActivo(f.id, !f.activo);
+      setOcupado(null);
+    });
+  };
+
+  const descargar = async () => {
+    const salonElegido = salones.find((s) => s.nombre === salon);
+    setOcupado("descarga");
+    setProgreso("Preparando…");
+    window.dispatchEvent(new Event("typelake:cargando"));
+    try {
+      let lista = await listarCredenciales(salon === "todos" ? null : (salonElegido?.id ?? null));
+      const sinClave = lista.filter((f) => !f.clave);
+
+      if (sinClave.length > 0) {
+        const ok = confirm(
+          `${sinClave.length} alumno(s) no tienen su contraseña guardada (sus cuentas se crearon antes de esta función).\n\n` +
+            `¿Generar contraseñas NUEVAS para ellos? Sus contraseñas actuales dejarán de funcionar.\n\n` +
+            `Aceptar = generar nuevas e incluirlas · Cancelar = descargar sin esas contraseñas`,
+        );
+        if (ok) {
+          const nuevas: Record<string, string> = {};
+          for (let i = 0; i < sinClave.length; i += TANDA) {
+            setProgreso(`Generando contraseñas ${Math.min(i + TANDA, sinClave.length)}/${sinClave.length}…`);
+            Object.assign(nuevas, await generarClaves(sinClave.slice(i, i + TANDA).map((f) => f.id)));
+          }
+          lista = lista.map((f) => (f.clave ? f : { ...f, clave: nuevas[f.id] ?? null }));
+        }
+      }
+
+      const sufijo = salon === "todos" ? "todos" : salon.replace(/[^a-zA-Z0-9]+/g, "_");
+      descargarExcel(lista, `credenciales_${sufijo}.xlsx`);
+    } catch (e) {
+      alert(`No se pudieron descargar las credenciales: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setOcupado(null);
+      setProgreso("");
+      window.dispatchEvent(new Event("typelake:listo"));
+    }
   };
 
   return (
-    <section className="bg-white rounded-2xl border border-slate-200 p-6">
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <h2 className="text-lg font-semibold text-slate-800 mr-auto">Cuentas ({filas.length})</h2>
-        <select value={salon} onChange={(e) => setSalon(e.target.value)} className="text-sm px-3 py-2 rounded-lg border border-slate-200">
+    <section className="tarjeta p-6 animate-aparecer">
+      <div className="flex flex-wrap items-center gap-3 mb-5">
+        <div className="mr-auto">
+          <h2 className="text-lg font-bold text-slate-900">Cuentas</h2>
+          <p className="text-sm text-slate-500">
+            {visibles.length} de {filas.length} alumnos
+          </p>
+        </div>
+        <select value={salon} onChange={(e) => setSalon(e.target.value)} className="campo w-auto">
           <option value="todos">Todos los salones</option>
-          {salones.map((s) => <option key={s}>{s}</option>)}
+          {salones.map((s) => (
+            <option key={s.nombre}>{s.nombre}</option>
+          ))}
         </select>
-        <input
-          value={buscar}
-          onChange={(e) => setBuscar(e.target.value)}
-          placeholder="Buscar alumno…"
-          className="text-sm px-3 py-2 rounded-lg border border-slate-200"
-        />
+        <input value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Buscar alumno…" className="campo w-48" />
+        <button onClick={descargar} disabled={!!ocupado || filas.length === 0} className="btn btn-exito">
+          {ocupado === "descarga" ? (
+            <>
+              <Spinner /> {progreso}
+            </>
+          ) : (
+            <>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+                <path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+              </svg>
+              Descargar credenciales{salon === "todos" ? "" : ` de ${salon}`}
+            </>
+          )}
+        </button>
       </div>
 
       {filas.length === 0 ? (
-        <p className="text-slate-500 text-sm">Todavía no hay alumnos. Importa un Excel para empezar.</p>
+        <p className="text-slate-500 text-sm bg-slate-50 rounded-xl px-4 py-8 text-center">Todavía no hay alumnos. Importa un Excel para empezar.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto -mx-6">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-slate-500 border-b border-slate-100">
-                <th className="py-2 pr-3 font-medium">Salón</th>
-                <th className="py-2 pr-3 font-medium">Apellidos y nombres</th>
-                <th className="py-2 pr-3 font-medium">Usuario</th>
-                <th className="py-2 pr-3 font-medium">Estado</th>
-                <th className="py-2 font-medium"></th>
+              <tr className="text-left text-xs uppercase tracking-wider text-slate-400 border-y border-slate-100 bg-slate-50/60">
+                <th className="py-2.5 pl-6 pr-3 font-semibold">Salón</th>
+                <th className="py-2.5 pr-3 font-semibold">Apellidos y nombres</th>
+                <th className="py-2.5 pr-3 font-semibold">Usuario</th>
+                <th className="py-2.5 pr-3 font-semibold">Estado</th>
+                <th className="py-2.5 pr-6 font-semibold"></th>
               </tr>
             </thead>
             <tbody>
               {visibles.map((f) => (
-                <tr key={f.id} className={`border-b border-slate-50 ${f.activo ? "" : "opacity-50"}`}>
-                  <td className="py-2 pr-3 whitespace-nowrap">{f.salon}</td>
-                  <td className="py-2 pr-3">{f.apellidos}, {f.nombres}</td>
-                  <td className="py-2 pr-3 font-mono">{f.usuario}</td>
-                  <td className="py-2 pr-3">{f.activo ? "Activo" : "Desactivado"}</td>
-                  <td className="py-2 text-right whitespace-nowrap">
-                    {claves[f.id] ? (
-                      <span className="font-mono bg-emerald-50 text-emerald-700 px-2 py-1 rounded mr-2">{claves[f.id]}</span>
+                <tr key={f.id} className={`border-b border-slate-50 transition hover:bg-lago-50/40 ${f.activo ? "" : "opacity-50"}`}>
+                  <td className="py-2.5 pl-6 pr-3 whitespace-nowrap">
+                    <span className="chip">{f.salon}</span>
+                  </td>
+                  <td className="py-2.5 pr-3 text-slate-800">
+                    <span className="font-medium">{f.apellidos}</span>, {f.nombres}
+                  </td>
+                  <td className="py-2.5 pr-3 font-mono text-slate-600">{f.usuario}</td>
+                  <td className="py-2.5 pr-3">
+                    <span className={`chip ${f.activo ? "bg-emerald-50 text-emerald-700" : ""}`}>{f.activo ? "Activo" : "Desactivado"}</span>
+                  </td>
+                  <td className="py-2.5 pr-6 text-right whitespace-nowrap">
+                    {ocupado === f.id && pendiente ? (
+                      <Spinner className="h-4 w-4 inline text-lago-600" />
                     ) : (
-                      <button disabled={pendiente} onClick={() => nuevaClave(f)} className="text-sky-700 hover:underline mr-3">
-                        Nueva contraseña
-                      </button>
+                      <>
+                        {claves[f.id] ? (
+                          <span className="font-mono bg-emerald-50 text-emerald-700 px-2 py-1 rounded-lg mr-2">{claves[f.id]}</span>
+                        ) : (
+                          <button disabled={!!ocupado} onClick={() => nuevaClave(f)} className="btn-enlace">
+                            Nueva contraseña
+                          </button>
+                        )}
+                        <button disabled={!!ocupado} onClick={() => alternar(f)} className="btn-enlace text-slate-500">
+                          {f.activo ? "Desactivar" : "Activar"}
+                        </button>
+                      </>
                     )}
-                    <button disabled={pendiente} onClick={() => alternar(f)} className="text-slate-500 hover:underline">
-                      {f.activo ? "Desactivar" : "Activar"}
-                    </button>
                   </td>
                 </tr>
               ))}

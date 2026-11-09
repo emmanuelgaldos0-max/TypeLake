@@ -3,6 +3,7 @@
 import { useState } from "react";
 import * as XLSX from "xlsx";
 import { crearAlumnos, type FilaAlumno, type ResultadoAlumno } from "@/app/admin/acciones";
+import Spinner from "@/components/ui/Spinner";
 
 const TANDA = 20;
 
@@ -96,10 +97,10 @@ export default function ImportarAlumnos() {
   }, {});
 
   return (
-    <section className="bg-white rounded-2xl border border-slate-200 p-6">
+    <section className="tarjeta p-6 animate-aparecer">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <h2 className="text-lg font-semibold text-slate-800">Importar alumnos desde Excel</h2>
-        <button onClick={descargarPlantilla} className="text-sm px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50">
+        <button onClick={descargarPlantilla} className="btn btn-secundario px-3 py-1.5">
           Descargar plantilla
         </button>
       </div>
@@ -113,7 +114,7 @@ export default function ImportarAlumnos() {
         accept=".xlsx,.xls,.csv"
         onChange={alElegir}
         disabled={progreso !== null}
-        className="block text-sm file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100"
+        className="block text-sm file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-lago-50 file:text-lago-700 hover:file:bg-lago-100"
       />
 
       {errores.length > 0 && (
@@ -133,9 +134,15 @@ export default function ImportarAlumnos() {
           <button
             onClick={crear}
             disabled={progreso !== null}
-            className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white font-semibold rounded-lg"
+            className="btn btn-primario"
           >
-            {progreso !== null ? `Creando cuentas… ${progreso}/${filas.length}` : `Crear ${filas.length} cuentas`}
+            {progreso !== null ? (
+              <>
+                <Spinner /> Creando cuentas… {progreso}/{filas.length}
+              </>
+            ) : (
+              `Crear ${filas.length} cuentas`
+            )}
           </button>
         </div>
       )}
@@ -151,7 +158,7 @@ export default function ImportarAlumnos() {
           </p>
           {creados > 0 && (
             <>
-              <button onClick={() => descargarCredenciales(resultados)} className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg">
+              <button onClick={() => descargarCredenciales(resultados)} className="btn btn-exito">
                 Descargar usuarios y contraseñas (Excel)
               </button>
               <p className="text-xs text-amber-700 mt-2">

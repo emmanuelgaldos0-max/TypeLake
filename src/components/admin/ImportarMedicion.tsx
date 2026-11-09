@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { importarNotasMedicion, prepararMedicionHistorica, type ResultadoImportacion } from "@/app/admin/acciones";
 import { leerLibroMediciones, type HojaMedicion } from "@/lib/leerMedicionExcel";
+import Spinner from "@/components/ui/Spinner";
 
 const TANDA = 20;
 
@@ -112,7 +113,7 @@ export default function ImportarMedicion() {
   const errores = resultados.filter((r) => r.estado === "error");
 
   return (
-    <section className="bg-white rounded-2xl border border-slate-200 p-6">
+    <section className="tarjeta p-6 animate-aparecer">
       <h2 className="text-lg font-semibold text-slate-800 mb-1">Importar resultados de una medición</h2>
       <p className="text-sm text-slate-500 mb-4">
         Sube el Excel con una hoja por salón (columna <b>Nombres</b> como &quot;APELLIDOS, NOMBRES&quot; y columnas <b>WPM 1</b>, <b>WPM 2</b>…).
@@ -125,7 +126,7 @@ export default function ImportarMedicion() {
         accept=".xlsx,.xls"
         onChange={alElegir}
         disabled={progreso !== null}
-        className="block text-sm file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100"
+        className="block text-sm file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-lago-50 file:text-lago-700 hover:file:bg-lago-100"
       />
 
       {hojas.length > 0 && (
@@ -139,7 +140,7 @@ export default function ImportarMedicion() {
                   setGrupo(e.target.value);
                   setNombre(grupos.find((g) => g.clave === e.target.value)?.nombre ?? "");
                 }}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200"
+                className="campo"
               >
                 {grupos.map((g) => (
                   <option key={g.clave} value={g.clave}>{g.nombre}</option>
@@ -148,11 +149,11 @@ export default function ImportarMedicion() {
             </label>
             <label className="text-sm">
               <span className="block text-slate-600 mb-1">Nombre en TypeLake</span>
-              <input value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-slate-200" />
+              <input value={nombre} onChange={(e) => setNombre(e.target.value)} className="campo" />
             </label>
             <label className="text-sm">
               <span className="block text-slate-600 mb-1">Fecha en que se tomó</span>
-              <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-slate-200" />
+              <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="campo" />
             </label>
           </div>
 
@@ -225,9 +226,15 @@ export default function ImportarMedicion() {
           <button
             onClick={importar}
             disabled={progreso !== null || !incluidas.length || !nombre.trim()}
-            className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white font-semibold rounded-lg"
+            className="btn btn-primario"
           >
-            {progreso ?? `Importar "${nombre}" (${totalNotas} alumnos con nota)`}
+            {progreso ? (
+              <>
+                <Spinner /> {progreso}
+              </>
+            ) : (
+              `Importar "${nombre}" (${totalNotas} alumnos con nota)`
+            )}
           </button>
         </div>
       )}
@@ -244,7 +251,7 @@ export default function ImportarMedicion() {
           </p>
           {cuentasNuevas > 0 && (
             <>
-              <button onClick={descargarCredenciales} className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg">
+              <button onClick={descargarCredenciales} className="btn btn-exito">
                 Descargar usuarios y contraseñas nuevos (Excel)
               </button>
               <p className="text-xs text-amber-700 mt-2">Descárgalo ahora: por seguridad las contraseñas no se vuelven a mostrar.</p>
