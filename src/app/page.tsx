@@ -12,11 +12,10 @@ export default async function Inicio() {
   const nombre = sesion?.perfil.nombres.split(" ")[0];
   const reto = esAdmin ? null : await recordProfesorVisible();
   // Memes: alumnos según su preferencia; sin cuenta, apagados hasta que los activen. El admin no los ve.
-  const memes = esAlumno
-    ? { cuenta: "alumno" as const, ...(await preferenciaMemes(sesion!.user.id)) }
-    : !sesion
-      ? { cuenta: "sin_cuenta" as const, activos: false, bloqueados: false }
-      : undefined;
+  // Memes: con cuenta (alumno o profesor) según su preferencia; sin cuenta, apagados hasta que los activen.
+  const memes = sesion
+    ? { cuenta: "alumno" as const, ...(await preferenciaMemes(sesion.user.id)) }
+    : { cuenta: "sin_cuenta" as const, activos: false, bloqueados: false };
 
   return (
     <main className="flex-1 px-4 pt-10 pb-12 animate-aparecer">

@@ -37,7 +37,7 @@ async function sesionAdmin() {
 export async function elegirMeme(ppm: number, referencia: number | null): Promise<{ url: string } | null> {
   if (!Number.isFinite(ppm)) return null;
   const sesion = await obtenerSesion();
-  if (sesion?.perfil.rol === "alumno") {
+  if (sesion) {
     const p = await preferenciaMemes(sesion.user.id);
     if (p.bloqueados || !p.activos) return null;
   }
@@ -57,15 +57,15 @@ export async function elegirMeme(ppm: number, referencia: number | null): Promis
   return firmado ? { url: firmado.signedUrl } : null;
 }
 
-/** El alumno activa o apaga sus memes. */
+/** El alumno (o el profesor) activa o apaga sus memes. */
 export async function cambiarMisMemes(activos: boolean): Promise<string | null> {
   const sesion = await obtenerSesion();
-  if (sesion?.perfil.rol !== "alumno") return "Inicia sesión como alumno.";
+  if (!sesion) return "Inicia sesión.";
   const db = crearClienteAdmin();
   const actual = await preferenciaMemes(sesion.user.id);
   const { error } = await db
     .from("preferencias_memes")
-    .upsert({ alumno_id: sesion.user.id, activos, bloqueados: actual.bloqueados, actualizado_en: new Date().toISOString() });
+    .upsert({ alumno_id: sesion.user.id, activos, bloqueados: actual.bloqueadoAlumno, actualizado_en: new Date().toISOString() });
   if (error) return error.message;
   revalidatePath("/cuenta");
   revalidatePath("/");
@@ -81,6 +81,15 @@ export async function bloquearMemesAlumno(alumnoId: string, bloqueados: boolean)
     .from("preferencias_memes")
     .upsert({ alumno_id: alumnoId, activos: actual.activos, bloqueados, actualizado_en: new Date().toISOString() });
   if (error) return error.message;
+  revalidatePath("/admin/alumnos");
+  return null;
+}
+
+/** El admin quita (o vuelve a permitir) los memes a todos los alumnos de un salón. */
+export async function bloquearMemesSalon(salonId: number, bloqueados: boolean): Promise<string | null> {
+  if (!(await sesionAdmin())) return "No autorizado.";
+  const { error } = await crearClienteAdmin().from("salones").update({ memes_bloqueados: bloqueados }).eq("id", salonId);
+  if (error) return /memes_bloqueados/.test(error.message) ? "Falta aplicar la migración 15 (memes por salón) en Supabase." : error.message;
   revalidatePath("/admin/alumnos");
   return null;
 }

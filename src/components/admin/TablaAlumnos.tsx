@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import * as XLSX from "xlsx";
 import { cambiarActivo, generarClaves, listarCredenciales, restablecerClave, type FilaCredencial } from "@/app/admin/acciones";
-import { bloquearMemesAlumno } from "@/app/memes/acciones";
+import { bloquearMemesAlumno, bloquearMemesSalon } from "@/app/memes/acciones";
 import Spinner from "@/components/ui/Spinner";
 import { mensajeError } from "@/lib/errores";
 
@@ -51,7 +51,7 @@ function descargarExcel(filas: FilaCredencial[], nombreArchivo: string) {
   XLSX.writeFile(libro, nombreArchivo);
 }
 
-export default function TablaAlumnos({ filas }: { filas: FilaTabla[] }) {
+export default function TablaAlumnos({ filas, salonesSinMemes = [] }: { filas: FilaTabla[]; salonesSinMemes?: number[] }) {
   const salones = useMemo(() => {
     const m = new Map<string, number | null>();
     filas.forEach((f) => m.set(f.salon, f.salonId));
@@ -103,6 +103,28 @@ export default function TablaAlumnos({ filas }: { filas: FilaTabla[] }) {
     iniciar(async () => {
       const fallo = await bloquearMemesAlumno(f.id, !f.memesBloqueados);
       if (fallo) alert(fallo);
+      setOcupado(null);
+    });
+  };
+
+  const salonActual = salon === "todos" ? null : (salones.find((s) => s.nombre === salon)?.id ?? null);
+  const salonSinMemes = (id: number | null) => id !== null && salonesSinMemes.includes(id);
+
+  const alternarMemesSalon = () => {
+    if (salonActual === null) return;
+    const quitar = !salonSinMemes(salonActual);
+    const texto = quitar
+      ? `¿Quitar los memes a todo ${salon}? Ningún alumno del salón los verá, aunque los tenga activados.`
+      : `¿Volver a permitir los memes en ${salon}? (Los alumnos a los que se los quitaste uno por uno seguirán sin memes.)`;
+    if (!confirm(texto)) return;
+    setOcupado("salon");
+    iniciar(async () => {
+      try {
+        const fallo = await bloquearMemesSalon(salonActual, quitar);
+        if (fallo) alert(fallo);
+      } catch (e) {
+        alert(mensajeError(e));
+      }
       setOcupado(null);
     });
   };
@@ -159,6 +181,12 @@ export default function TablaAlumnos({ filas }: { filas: FilaTabla[] }) {
             <option key={s.nombre}>{s.nombre}</option>
           ))}
         </select>
+        {salonActual !== null && (
+          <button onClick={alternarMemesSalon} disabled={!!ocupado} className="btn btn-secundario">
+            {ocupado === "salon" && pendiente ? <Spinner /> : null}
+            {salonSinMemes(salonActual) ? "Permitir memes al salón" : "Quitar memes al salón"}
+          </button>
+        )}
         <input value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Buscar alumno…" className="campo w-48" />
         <button onClick={descargar} disabled={!!ocupado || filas.length === 0} className="btn btn-exito">
           {ocupado === "descarga" ? (
@@ -214,7 +242,15 @@ export default function TablaAlumnos({ filas }: { filas: FilaTabla[] }) {
                   </td>
                   <td className="py-2.5 pr-3">
                     <span className={`chip ${f.activo ? "bg-emerald-50 text-emerald-700" : ""}`}>{f.activo ? "Activo" : "Desactivado"}</span>
-                    {f.memesBloqueados && <span className="chip ml-1 bg-rose-50 text-rose-700">Sin memes</span>}
+                    {f.memesBloqueados ? (
+                      <span className="chip ml-1 bg-rose-50 text-rose-700">Sin memes</span>
+                    ) : (
+                      salonSinMemes(f.salonId) && (
+                        <span className="chip ml-1 bg-rose-50 text-rose-700" title="Se quitaron los memes a todo su salón">
+                          Sin memes (salón)
+                        </span>
+                      )
+                    )}
                   </td>
                   <td className="py-2.5 pr-6 text-right whitespace-nowrap">
                     {ocupado === f.id && pendiente ? (

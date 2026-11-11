@@ -44,7 +44,7 @@ export default function MemesAlumno({ activos: inicial, bloqueados, mios }: { ac
     return (
       <section className="tarjeta p-6">
         <h2 className="font-semibold text-slate-800">Memes</h2>
-        <p className="text-sm text-slate-500 mt-1">Tu profesor desactivó los memes en tu cuenta.</p>
+        <p className="text-sm text-slate-500 mt-1">Tu profesor desactivó los memes para ti.</p>
       </section>
     );
   }

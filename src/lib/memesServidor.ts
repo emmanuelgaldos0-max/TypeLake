@@ -5,10 +5,21 @@ const BUCKET = "memes";
 /** Tiempo que se espera a que una subida en curso se confirme antes de considerarla huérfana. */
 const GRACIA_MS = 30 * 60 * 1000;
 
-/** Preferencia efectiva de memes de un alumno (sin fila, o sin la migración 12: activados y sin bloqueo). */
+/**
+ * Preferencia de memes de una cuenta (alumno o profesor). Sin fila, o sin la migración 12:
+ * activados y sin bloqueo. bloqueados = el admin los quitó al alumno o a todo su salón.
+ */
 export async function preferenciaMemes(alumnoId: string) {
-  const { data } = await crearClienteAdmin().from("preferencias_memes").select("activos, bloqueados").eq("alumno_id", alumnoId).maybeSingle();
-  return { activos: data?.activos ?? true, bloqueados: data?.bloqueados ?? false };
+  const db = crearClienteAdmin();
+  const [{ data }, { data: perfil }] = await Promise.all([
+    db.from("preferencias_memes").select("activos, bloqueados").eq("alumno_id", alumnoId).maybeSingle(),
+    // salones(*) para no fallar si la migración 15 aún no se aplicó
+    db.from("perfiles").select("salones(*)").eq("id", alumnoId).maybeSingle(),
+  ]);
+  const salon = perfil?.salones as unknown as { memes_bloqueados?: boolean } | null;
+  const bloqueadoAlumno = data?.bloqueados ?? false;
+  const bloqueadoSalon = salon?.memes_bloqueados === true;
+  return { activos: data?.activos ?? true, bloqueados: bloqueadoAlumno || bloqueadoSalon, bloqueadoAlumno, bloqueadoSalon };
 }
 
 /** Enlaces temporales (1 hora) para mostrar imágenes del bucket privado de memes. */

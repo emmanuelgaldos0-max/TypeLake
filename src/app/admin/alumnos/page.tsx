@@ -13,6 +13,9 @@ export default async function PaginaAlumnos() {
   // Alumnos con memes bloqueados (si la migración 12 aún no se aplicó, ninguno)
   const { data: bloqueos } = await crearClienteAdmin().from("preferencias_memes").select("alumno_id").eq("bloqueados", true);
   const memesBloqueados = new Set((bloqueos ?? []).map((b) => b.alumno_id as string));
+  // Salones sin memes (select("*") para no fallar si la migración 15 aún no se aplicó)
+  const { data: salonesDb } = await db.from("salones").select("*");
+  const salonesSinMemes = (salonesDb ?? []).filter((s) => s.memes_bloqueados === true).map((s) => s.id as number);
 
   type Salon = { seccion: string; grados: { nombre: string; orden: number } | null } | null;
   const filas: FilaTabla[] = (data ?? [])
@@ -41,7 +44,7 @@ export default async function PaginaAlumnos() {
         <h1 className="titulo-pagina">Alumnos</h1>
         <p className="subtitulo">Crea las cuentas desde un Excel y entrega a cada alumno su usuario y contraseña.</p>
       </div>
-      <TablaAlumnos filas={filas} />
+      <TablaAlumnos filas={filas} salonesSinMemes={salonesSinMemes} />
       <ImportarAlumnos />
     </div>
   );
