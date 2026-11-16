@@ -176,6 +176,7 @@ function PanelProfesor({ estado, cerrar, refrescar }: { estado: EstadoApp; cerra
     if (!r.ok) return setMensaje({ ok: false, texto: r.error });
     setMensaje(null);
     setAbierto(true);
+    refrescar(); // los contadores cambian con cada prueba guardada
     cargarRecientes();
   };
 
