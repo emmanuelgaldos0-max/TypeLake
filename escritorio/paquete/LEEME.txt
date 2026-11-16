@@ -1,3 +1,3 @@
-Pon aqui el paquete descargado de la pagina (Admin > Sin internet) con el nombre que quieras y extension .tlpaquete
-para que el instalador lo incluya y cada PC tenga la lista de alumnos desde el primer momento.
+Aqui se guarda solo el paquete con los datos actuales de la pagina (alumnos, contrasenas cifradas,
+records y memes) cada vez que se genera el instalador con: npm run instalador
 No se sube a GitHub: contiene las contrasenas cifradas de los alumnos.

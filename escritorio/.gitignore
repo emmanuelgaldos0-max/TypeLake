@@ -2,3 +2,5 @@ node_modules/
 dist/
 instalador/
 paquete/*.tlpaquete
+pin-profesor.txt
+tmp/
