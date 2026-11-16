@@ -2,9 +2,12 @@
 
 import { useCallback } from "react";
 import { guardarResultadoProfesor, recordProfesor } from "@/app/admin/acciones";
-import PruebaMecanografia, { type AvisoGuardado } from "@/components/PruebaMecanografia";
+import PruebaMecanografia, { type AvisoGuardado, type ServicioMemes } from "@/components/PruebaMecanografia";
+import { cambiarMisMemes, elegirMeme } from "@/app/memes/acciones";
 import { crearClienteNavegador } from "@/lib/supabase/client";
 import type { Resultado } from "@/lib/metricas";
+
+const SERVICIO_MEMES: ServicioMemes = { elegir: elegirMeme, cambiarPreferencia: cambiarMisMemes };
 
 const MOTIVOS: Record<string, string> = {
   salto_brusco: "fue mucho más rápido que tus resultados habituales",
@@ -68,6 +71,6 @@ export default function PracticaAlumno({
     }
   }, []);
 
-  if (profesor) return <PruebaMecanografia guardar={registrarProfesor} obtenerRecord={recordProfesor} memes={memes} />;
-  return <PruebaMecanografia guardar={guardar ? registrar : undefined} obtenerRecord={guardar ? obtenerRecord : undefined} memes={memes} />;
+  if (profesor) return <PruebaMecanografia guardar={registrarProfesor} obtenerRecord={recordProfesor} memes={memes} servicioMemes={SERVICIO_MEMES} />;
+  return <PruebaMecanografia guardar={guardar ? registrar : undefined} obtenerRecord={guardar ? obtenerRecord : undefined} memes={memes} servicioMemes={SERVICIO_MEMES} />;
 }

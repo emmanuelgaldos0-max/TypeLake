@@ -1,0 +1,17 @@
+/* Los mismos estilos de la página, con las fuentes incluidas (no hay internet). */
+@import "@fontsource/plus-jakarta-sans/400.css";
+@import "@fontsource/plus-jakarta-sans/500.css";
+@import "@fontsource/plus-jakarta-sans/600.css";
+@import "@fontsource/plus-jakarta-sans/700.css";
+@import "@fontsource/plus-jakarta-sans/800.css";
+@import "@fontsource/geist-mono/400.css";
+@import "@fontsource/geist-mono/500.css";
+@import "../../src/app/globals.css";
+
+@source "../../src/components";
+@source "./";
+
+:root {
+  --font-jakarta: "Plus Jakarta Sans";
+  --font-geist-mono: "Geist Mono";
+}

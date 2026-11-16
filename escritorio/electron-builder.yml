@@ -1,0 +1,37 @@
+# Instalador de TypeLake para Windows 10/11 (NSIS).
+appId: pe.typelake.escritorio
+productName: TypeLake
+copyright: TypeLake
+directories:
+  output: instalador
+  buildResources: build
+files:
+  - dist/**/*
+  - package.json
+  - "!node_modules/**/*"
+# Si existe paquete/TypeLake.tlpaquete, viaja dentro del instalador y se carga solo
+extraResources:
+  - from: paquete
+    to: paquete
+    filter:
+      - "*.tlpaquete"
+asar: true
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+  executableName: TypeLake
+nsis:
+  oneClick: false
+  perMachine: true
+  allowElevation: true
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: TypeLake
+  artifactName: TypeLake-Instalador.${ext}
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  include: build/instalador.nsh
+  deleteAppDataOnUninstall: false

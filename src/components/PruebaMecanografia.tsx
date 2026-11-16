@@ -4,7 +4,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { generarTexto } from "@/lib/generarTexto";
 import { calcularPpm, contarCorrectos, variacionRitmo, type Resultado } from "@/lib/metricas";
 import Spinner from "@/components/ui/Spinner";
-import { cambiarMisMemes, elegirMeme } from "@/app/memes/acciones";
 
 type Estado = "listo" | "escribiendo" | "terminado";
 
@@ -29,6 +28,13 @@ interface Props {
    * desactivó). Sin cuenta: apagados por defecto y la preferencia queda en el navegador.
    */
   memes?: { cuenta: "alumno" | "sin_cuenta"; activos: boolean; bloqueados: boolean };
+  /** De dónde salen los memes y dónde se guarda la preferencia (la página o la app sin internet). */
+  servicioMemes?: ServicioMemes;
+}
+
+export interface ServicioMemes {
+  elegir: (ppm: number, referencia: number | null) => Promise<{ url: string } | null>;
+  cambiarPreferencia: (activos: boolean) => Promise<unknown>;
 }
 
 export interface EstadoMemes {
@@ -69,7 +75,7 @@ function leerMemesNavegador() {
   }
 }
 
-export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar, obtenerRecord, memes }: Props) {
+export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar, obtenerRecord, memes, servicioMemes }: Props) {
   const [memesActivos, setMemesActivos] = useState(memes?.cuenta === "alumno" ? memes.activos && !memes.bloqueados : false);
   const [memeUrl, setMemeUrl] = useState<string | null>(null);
   const [memeCargando, setMemeCargando] = useState(false);
@@ -150,12 +156,14 @@ export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar
   }, [memes?.cuenta]);
 
   const buscarMeme = useCallback((ppm: number, referencia: number | null) => {
+    if (!servicioMemes) return;
     setMemeCargando(true);
-    elegirMeme(ppm, referencia)
+    servicioMemes
+      .elegir(ppm, referencia)
       .then((m) => setMemeUrl(m?.url ?? null))
       .catch(() => setMemeUrl(null))
       .finally(() => setMemeCargando(false));
-  }, []);
+  }, [servicioMemes]);
 
   const alternarMemes = useCallback(() => {
     if (!memes || memes.bloqueados) return;
@@ -169,11 +177,11 @@ export default function PruebaMecanografia({ duracionSeg = DURACION_SEG, guardar
         // sin almacenamiento: la preferencia dura solo esta visita
       }
     } else {
-      cambiarMisMemes(nuevo).catch(() => {});
+      servicioMemes?.cambiarPreferencia(nuevo).catch(() => {});
     }
     if (!nuevo) setMemeUrl(null);
     else if (ppmFinalRef.current !== null) buscarMeme(ppmFinalRef.current, referenciaRef.current);
-  }, [memes, buscarMeme]);
+  }, [memes, buscarMeme, servicioMemes]);
 
   // El texto se genera en el navegador para que siempre sea distinto.
   useEffect(() => {
