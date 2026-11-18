@@ -31,7 +31,7 @@ export async function cargarDashboard(db: SupabaseClient, modo: "admin" | "publi
     traerTodo((d, h) => db.from("salones").select("id, seccion, grados(nombre, orden)").eq("anio", cfg?.anio_escolar ?? 0).range(d, h)),
     traerTodo((d, h) => db.from("perfiles").select("id, usuario, nombres, apellidos, salon_id").eq("rol", "alumno").eq("activo", true).range(d, h)),
     traerTodo((d, h) =>
-      db.from("intentos").select("alumno_id, ppm, precision_pct, medicion_id, creado_en").in("estado", ["valido", "aprobado"]).order("creado_en").range(d, h),
+      db.from("intentos").select("alumno_id, ppm, precision_pct, medicion_id, creado_en").in("estado", ["valido", "aprobado"]).order("creado_en").order("id").range(d, h),
     ),
     // Si la migración 9 aún no se aplicó, el dashboard sigue funcionando sin estos datos
     traerTodo((d, h) => db.from("evaluados_sin_nota").select("alumno_id, medicion_id").range(d, h)).catch((e) => {

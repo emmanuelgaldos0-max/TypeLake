@@ -24,6 +24,7 @@ export default async function FichaAlumno({ params }: { params: Promise<{ id: st
         .select("id, ppm, precision_pct, referencia_ppm, estado, motivos, medicion_id, creado_en, errores_por_tecla")
         .eq("alumno_id", id)
         .order("creado_en")
+        .order("id")
         .range(d, h),
     ),
     db.from("mediciones").select("id, nombre"),

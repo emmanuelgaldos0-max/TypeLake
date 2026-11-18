@@ -1,4 +1,5 @@
 import ImportarMedicion from "@/components/admin/ImportarMedicion";
+import { traerTodo } from "@/lib/supabase/paginar";
 import { crearClienteServidor } from "@/lib/supabase/server";
 
 const fechaCorta = new Intl.DateTimeFormat("es-PE", { day: "numeric", month: "long", year: "numeric", timeZone: "America/Lima" });
@@ -10,7 +11,7 @@ export default async function PaginaMediciones() {
   const resumen = await Promise.all(
     (mediciones ?? []).map(async (m) => {
       const [{ data }, { data: sinNota }] = await Promise.all([
-        db.from("intentos").select("alumno_id, ppm").eq("medicion_id", m.id).in("estado", ["valido", "aprobado"]),
+        traerTodo((d, h) => db.from("intentos").select("alumno_id, ppm").eq("medicion_id", m.id).in("estado", ["valido", "aprobado"]).order("id").range(d, h)).then((data) => ({ data })),
         db.from("evaluados_sin_nota").select("alumno_id").eq("medicion_id", m.id),
       ]);
       const mejores = new Map<string, number>();

@@ -11,7 +11,7 @@ export default async function PaginaRevision({ searchParams }: { searchParams: P
     traerTodo((d, h) => {
       let q = db.from("intentos").select("id, alumno_id, ppm, precision_pct, referencia_ppm, estado, motivos, medicion_id, creado_en");
       q = historial ? q.not("revisado_en", "is", null).order("revisado_en", { ascending: false }) : q.eq("estado", "sospechoso").order("creado_en", { ascending: false });
-      return q.range(d, h);
+      return q.order("id").range(d, h);
     }),
     traerTodo((d, h) => db.from("perfiles").select("id, nombres, apellidos, salones(seccion, grados(nombre))").eq("rol", "alumno").range(d, h)),
     db.from("mediciones").select("id, nombre"),

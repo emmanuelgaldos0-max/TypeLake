@@ -5,6 +5,7 @@ import RankingAlumnos from "@/components/progreso/RankingAlumnos";
 import PromedioSalones from "@/components/progreso/PromedioSalones";
 import RetoProfesor from "@/components/RetoProfesor";
 import { recordProfesorVisible } from "@/lib/profesor";
+import { traerTodo } from "@/lib/supabase/paginar";
 import { crearClienteServidor, obtenerSesion } from "@/lib/supabase/server";
 
 interface FilaIntento {
@@ -24,12 +25,16 @@ export default async function PaginaProgreso() {
   if (sesion.perfil.rol === "admin") redirect("/admin");
 
   const db = await crearClienteServidor();
-  const [{ data }, { data: formulas }, { data: cfg }, reto] = await Promise.all([
-    db
-      .from("intentos")
-      .select("ppm, precision_pct, creado_en, estado, modo, errores_por_tecla")
-      .order("creado_en", { ascending: true })
-      .limit(500),
+  // Todos sus intentos, por páginas de 1000 (antes se cortaba en los 500 más antiguos)
+  const [data, { data: formulas }, { data: cfg }, reto] = await Promise.all([
+    traerTodo((d, h) =>
+      db
+        .from("intentos")
+        .select("ppm, precision_pct, creado_en, estado, modo, errores_por_tecla")
+        .order("creado_en", { ascending: true })
+        .order("id", { ascending: true })
+        .range(d, h),
+    ),
     db.from("formulas_promedio").select("id, nombre").eq("visible_alumnos", true).order("id"),
     // select("*") para no fallar si la migración 10 aún no se aplicó
     db.from("configuracion").select("*").single(),
