@@ -1,12 +1,13 @@
 // Formato de los archivos que viajan entre la página y la app de escritorio sin internet.
 // Lo usan el servidor (Next) y el proceso principal de la app (Electron). Sin dependencias.
 //
-//  Paquete (página → PC):  alumnos con su contraseña cifrada (bcrypt), récords, memes
-//                          aprobados y el PIN del profesor. Va cifrado.
+//  Paquete (página → PC):  alumnos, códigos de salón, récords, memes aprobados y el
+//                          PIN del profesor. Va cifrado. En la PC el alumno entra con
+//                          su usuario y el código de su salón (sin contraseña).
 //  Resultados (PC → página): intentos hechos sin internet, cada uno firmado con la clave
 //                          del paquete para que no se puedan inventar o editar a mano.
 
-export const VERSION_FORMATO = 1;
+export const VERSION_FORMATO = 2;
 export const EXT_PAQUETE = "tlpaquete";
 export const EXT_RESULTADOS = "tlresultados";
 
@@ -16,8 +17,7 @@ export interface AlumnoPaquete {
   nombres: string;
   apellidos: string;
   salon: string;
-  /** Contraseña cifrada con bcrypt (la misma que usa la página). */
-  hash: string;
+  salonId: number | null;
   /** Mejor PPM válido en línea al generar el paquete. */
   mejor: number | null;
   memesActivos: boolean;
@@ -41,6 +41,8 @@ export interface Paquete {
   /** Clave (hex) con la que la PC firma cada intento. El servidor la vuelve a derivar del id. */
   clave_firma: string;
   pin: { sal: string; hash: string };
+  /** Código de cada salón para ingresar en la PC (usuario + código). */
+  salones: { id: number; nombre: string; codigo: string }[];
   alumnos: AlumnoPaquete[];
   memes: MemePaquete[];
 }

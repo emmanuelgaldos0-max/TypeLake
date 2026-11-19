@@ -11,7 +11,7 @@
     "iniciar": "npm run compilar && electron .",
     "icono": "node generar-icono.mjs",
     "instalador": "npm run paquete && npm run compilar && electron-builder --win nsis",
-    "paquete": "esbuild generar-paquete.ts --bundle --platform=node --format=esm --target=node22 --external:@supabase/supabase-js --outfile=tmp/generar-paquete.mjs --log-level=warning && node --env-file=../.env.local tmp/generar-paquete.mjs"
+    "paquete": "esbuild generar-paquete.ts --bundle --platform=node --format=esm --target=node22 --external:@supabase/supabase-js --external:xlsx --outfile=tmp/generar-paquete.mjs --log-level=warning && node --env-file=../.env.local tmp/generar-paquete.mjs"
   },
   "devDependencies": {
     "@fontsource/geist-mono": "^5.3.0",
@@ -19,7 +19,6 @@
     "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/vite": "^4.3.5",
     "@vitejs/plugin-react": "^5.2.0",
-    "bcryptjs": "^3.0.3",
     "electron": "^38.8.6",
     "electron-builder": "^26.18.0",
     "esbuild": "^0.25.12",

@@ -37,6 +37,21 @@ export function firmaValida(claveHex: string, i: IntentoSinInternet): boolean {
   return recibida.length === esperada.length && timingSafeEqual(recibida, esperada);
 }
 
+// Sin letras que se confunden (0/O, 1/I/L)
+const ALFABETO_CODIGO = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+/**
+ * Código de un salón para ingresar en la app sin internet. Se deriva de la clave secreta
+ * del servidor: siempre es el mismo para ese salón y nadie puede adivinarlo sin la clave.
+ */
+export function codigoSalon(secreto: string, salonId: number): string {
+  const bytes = createHmac("sha256", secreto).update(`typelake-salon:${salonId}`).digest();
+  return Array.from(bytes.subarray(0, 5), (b) => ALFABETO_CODIGO[b % ALFABETO_CODIGO.length]).join("");
+}
+
+/** Compara códigos sin importar mayúsculas, espacios ni guiones. */
+export const normalizarCodigo = (c: string) => String(c ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
 export function hashPin(pin: string, sal: string): string {
   return pbkdf2Sync(pin, sal, 100_000, 32, "sha256").toString("hex");
 }

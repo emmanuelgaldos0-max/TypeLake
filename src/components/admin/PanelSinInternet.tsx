@@ -23,10 +23,17 @@ interface Grupo {
   equipos: Set<string>;
 }
 
-export default function PanelSinInternet({ mediciones }: { mediciones: { id: number; nombre: string }[] }) {
+export default function PanelSinInternet({
+  mediciones,
+  codigos,
+}: {
+  mediciones: { id: number; nombre: string }[];
+  codigos: { nombre: string; codigo: string }[];
+}) {
   return (
     <>
       <Pasos />
+      <CodigosSalon codigos={codigos} />
       <DescargarPaquete />
       <SubirResultados mediciones={mediciones} />
     </>
@@ -42,14 +49,31 @@ function Pasos() {
           Instala <b>TypeLake</b> en cada PC con el instalador (<code>TypeLake-Instalador.exe</code>). Queda un ícono en el escritorio.
         </li>
         <li>
-          Descarga aquí el <b>paquete</b> (alumnos, contraseñas y memes) y cárgalo en cada PC: botón <b>Profesor</b> abajo a la derecha → tu PIN →{" "}
+          Descarga aquí el <b>paquete</b> (alumnos, récords y memes) y cárgalo en cada PC: botón <b>Profesor</b> abajo a la derecha → tu PIN →{" "}
           <b>Cargar paquete</b>. Hazlo de nuevo cuando agregues alumnos o memes.
         </li>
-        <li>Los alumnos practican con su usuario y contraseña. Los resultados se guardan en la PC.</li>
+        <li>Los alumnos entran con su <b>usuario</b> y el <b>código de su salón</b> (o practican sin cuenta, sin guardar nada). Los resultados se guardan en la PC.</li>
         <li>
           Para traerlos: <b>Profesor</b> → <b>Guardar resultados en USB</b>. Luego súbelos abajo y elige si cuentan como práctica o como medición.
         </li>
       </ol>
+    </section>
+  );
+}
+
+function CodigosSalon({ codigos }: { codigos: { nombre: string; codigo: string }[] }) {
+  return (
+    <section className="tarjeta p-6">
+      <h2 className="text-lg font-semibold text-slate-800">Códigos de salón</h2>
+      <p className="text-sm text-slate-500 mt-1 mb-4">En la app sin internet cada alumno entra con su usuario y el código de su salón. Los códigos no cambian.</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {codigos.map((c) => (
+          <div key={c.nombre} className="rounded-xl bg-slate-50 px-3 py-2">
+            <div className="text-xs text-slate-500">{c.nombre}</div>
+            <div className="font-mono text-lg font-bold tracking-widest text-slate-900">{c.codigo}</div>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
@@ -87,8 +111,8 @@ function DescargarPaquete() {
       <div>
         <h2 className="text-lg font-semibold text-slate-800">1. Descargar el paquete para las PCs</h2>
         <p className="text-sm text-slate-500 mt-1">
-          Elige un PIN de profesor: lo pedirá la app para cargar paquetes y sacar los resultados. Las contraseñas de los alumnos van cifradas.
-          Si un alumno cambia su contraseña en la página, en las PCs sigue valiendo la anterior hasta que cargues un paquete nuevo.
+          Elige un PIN de profesor: lo pedirá la app para cargar paquetes y sacar los resultados. Los alumnos o memes nuevos llegan a las PCs
+          cuando cargas un paquete nuevo.
         </p>
       </div>
       <div className="flex flex-wrap items-end gap-3">

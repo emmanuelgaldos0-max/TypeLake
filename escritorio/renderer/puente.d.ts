@@ -11,12 +11,14 @@ interface EstadoApp {
   equipo: string;
   carpeta: string;
   alumno: { nombres: string; apellidos: string; salon: string; memes: { activos: boolean; bloqueados: boolean } } | null;
+  invitado: boolean;
 }
 
 interface Window {
   typelake: {
     estado(): Promise<EstadoApp>;
-    entrar(usuario: string, clave: string): Promise<Resp>;
+    entrar(usuario: string, codigo: string): Promise<Resp>;
+    entrarInvitado(): Promise<void>;
     salir(): Promise<void>;
     record(): Promise<number | null>;
     guardar(r: unknown): Promise<Resp<{ ppm: number }>>;

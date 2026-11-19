@@ -4,25 +4,19 @@ import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { traerTodo } from "./supabase/paginar";
 import { VERSION_FORMATO, type AlumnoPaquete, type MemePaquete, type Paquete } from "./sinInternet";
-import { cifrarPaquete, claveFirmaPaquete, nuevoPin } from "./sinInternetCripto";
+import { cifrarPaquete, claveFirmaPaquete, codigoSalon, nuevoPin } from "./sinInternetCripto";
 
 export async function armarPaquete(db: SupabaseClient, secreto: string, pin: string) {
   if (!/^\d{4,8}$/.test(pin)) throw new Error("El PIN debe tener de 4 a 8 números.");
 
-  const [perfiles, intentos, { data: hashes, error: errHash }, { data: prefs }, { data: memes }] = await Promise.all([
+  const [perfiles, intentos, { data: prefs }, { data: memes }] = await Promise.all([
     traerTodo((d, h) =>
       db.from("perfiles").select("id, usuario, nombres, apellidos, salones(*, grados(nombre))").eq("rol", "alumno").eq("activo", true).range(d, h),
     ),
     traerTodo((d, h) => db.from("intentos").select("alumno_id, ppm").in("estado", ["valido", "aprobado"]).range(d, h)),
-    db.rpc("hashes_alumnos"),
     db.from("preferencias_memes").select("alumno_id, activos, bloqueados"),
     db.from("memes").select("ruta, criterio, categoria, ppm_min, ppm_max").eq("estado", "aprobado"),
   ]);
-  if (errHash) {
-    throw new Error(/hashes_alumnos/.test(errHash.message) ? "Falta aplicar la migración 16 (sin internet) en Supabase." : errHash.message);
-  }
-
-  const hashPor = new Map((hashes as { id: string; hash: string }[]).map((h) => [h.id, h.hash]));
   const mejorPor = new Map<string, number>();
   for (const i of intentos as { alumno_id: string; ppm: number }[]) {
     mejorPor.set(i.alumno_id, Math.max(mejorPor.get(i.alumno_id) ?? 0, Number(i.ppm)));
@@ -30,20 +24,21 @@ export async function armarPaquete(db: SupabaseClient, secreto: string, pin: str
   const prefPor = new Map((prefs ?? []).map((p) => [p.alumno_id as string, p]));
 
   type Perfil = { id: string; usuario: string; nombres: string; apellidos: string; salones: unknown };
-  type Salon = { seccion: string; memes_bloqueados?: boolean; grados: { nombre: string } | null } | null;
+  type Salon = { id: number; seccion: string; memes_bloqueados?: boolean; grados: { nombre: string } | null } | null;
   const alumnos: AlumnoPaquete[] = [];
+  const salones = new Map<number, { id: number; nombre: string; codigo: string }>();
   for (const p of perfiles as Perfil[]) {
-    const hash = hashPor.get(p.id);
-    if (!hash) continue;
     const s = p.salones as Salon;
     const pref = prefPor.get(p.id);
+    const nombreSalon = s ? `${s.grados?.nombre ?? ""} ${s.seccion}`.trim() : "Sin salón";
+    if (s && !salones.has(s.id)) salones.set(s.id, { id: s.id, nombre: nombreSalon, codigo: codigoSalon(secreto, s.id) });
     alumnos.push({
       id: p.id,
       usuario: p.usuario,
       nombres: p.nombres,
       apellidos: p.apellidos,
-      salon: s ? `${s.grados?.nombre ?? ""} ${s.seccion}`.trim() : "Sin salón",
-      hash,
+      salon: nombreSalon,
+      salonId: s?.id ?? null,
       mejor: mejorPor.get(p.id) ?? null,
       memesActivos: pref?.activos ?? true,
       memesBloqueados: (pref?.bloqueados ?? false) || s?.memes_bloqueados === true,
@@ -72,6 +67,7 @@ export async function armarPaquete(db: SupabaseClient, secreto: string, pin: str
     creado_en: new Date().toISOString(),
     clave_firma: claveFirmaPaquete(secreto, id),
     pin: nuevoPin(pin),
+    salones: [...salones.values()],
     alumnos,
     memes: memesPaquete,
   };
@@ -80,5 +76,13 @@ export async function armarPaquete(db: SupabaseClient, secreto: string, pin: str
     alumnos: alumnos.length,
     conRecord: alumnos.filter((a) => a.mejor !== null).length,
     memes: memesPaquete.length,
+    /** Para la lista de usuarios y códigos (no viaja en el paquete sin cifrar). */
+    lista: [...salones.values()].map((sal) => ({
+      ...sal,
+      alumnos: alumnos
+        .filter((a) => a.salonId === sal.id)
+        .map((a) => ({ apellidos: a.apellidos, nombres: a.nombres, usuario: a.usuario }))
+        .sort((x, y) => x.apellidos.localeCompare(y.apellidos, "es")),
+    })),
   };
 }

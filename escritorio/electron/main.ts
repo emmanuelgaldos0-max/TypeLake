@@ -4,10 +4,9 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFile
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { BrowserWindow, Menu, app, dialog, ipcMain, shell } from "electron";
-import bcrypt from "bcryptjs";
 import { categoriaDe } from "../../src/lib/memes";
 import { EXT_PAQUETE, EXT_RESULTADOS, VERSION_FORMATO, type AlumnoPaquete, type ArchivoResultados, type IntentoSinInternet, type Paquete } from "../../src/lib/sinInternet";
-import { descifrarPaquete, firmarIntento, pinCorrecto } from "../../src/lib/sinInternetCripto";
+import { descifrarPaquete, firmarIntento, normalizarCodigo, pinCorrecto } from "../../src/lib/sinInternetCripto";
 
 // ─── Carpeta de datos ────────────────────────────────────────────────────────
 // C:\ProgramData\TypeLake (compartida por todas las cuentas de Windows de la PC);
@@ -68,6 +67,7 @@ function validarPaquete(texto: string): Paquete {
   const p = descifrarPaquete<Paquete>(texto);
   if (p.tipo !== "typelake-paquete" || !Array.isArray(p.alumnos)) throw new Error("El archivo no es un paquete de TypeLake.");
   if (p.version > VERSION_FORMATO) throw new Error("Este paquete es de una versión más nueva de TypeLake. Instala la última versión.");
+  if (p.version < VERSION_FORMATO || !Array.isArray(p.salones)) throw new Error("Este paquete es antiguo. Descarga uno nuevo en la página: Admin → Sin internet.");
   return p;
 }
 
@@ -100,11 +100,10 @@ function cargarPaquete() {
 
 // ─── Sesiones ────────────────────────────────────────────────────────────────
 let alumno: AlumnoPaquete | null = null;
+/** Practicando sin cuenta: nada se guarda y todo se olvida al salir. */
+let invitado: { memes: boolean } | null = null;
 let profesorHasta = 0; // el panel del profesor queda abierto 10 minutos tras el PIN
 const profesorActivo = () => Date.now() < profesorHasta;
-
-// Hash de relleno para comparar aunque el usuario no exista (mismo tiempo de respuesta)
-const HASH_RELLENO = bcrypt.hashSync("relleno", 10);
 
 const nombreCompleto = (a: AlumnoPaquete) => `${a.nombres} ${a.apellidos}`;
 
@@ -135,21 +134,39 @@ function resumen() {
 type Resp<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 function registrarIpc() {
-  ipcMain.handle("estado", () => ({ ...resumen(), alumno: alumno && { nombres: alumno.nombres, apellidos: alumno.apellidos, salon: alumno.salon, memes: memesDe(alumno) } }));
+  ipcMain.handle("estado", () => ({
+    ...resumen(),
+    alumno: alumno && { nombres: alumno.nombres, apellidos: alumno.apellidos, salon: alumno.salon, memes: memesDe(alumno) },
+    invitado: !!invitado,
+  }));
 
-  ipcMain.handle("entrar", async (_e, usuario: string, clave: string): Promise<Resp> => {
+  // Ingreso con usuario + código del salón (sin contraseña)
+  let fallidos = 0;
+  ipcMain.handle("entrar", async (_e, usuario: string, codigo: string): Promise<Resp> => {
     if (!paquete) return { ok: false, error: "Esta PC todavía no tiene la lista de alumnos." };
+    // Pausa creciente tras varios intentos fallidos seguidos, para que no se puedan adivinar códigos
+    if (fallidos >= 5) await new Promise((r) => setTimeout(r, Math.min(fallidos - 4, 10) * 1000));
     const u = String(usuario ?? "").trim().toLowerCase();
     const a = paquete.alumnos.find((x) => x.usuario.toLowerCase() === u);
-    // Se compara igual aunque el usuario no exista, para no revelar qué usuarios hay
-    const ok = await bcrypt.compare(String(clave ?? ""), a?.hash ?? HASH_RELLENO);
-    if (!a || !ok) return { ok: false, error: "Usuario o contraseña incorrectos." };
+    const salon = a ? paquete.salones.find((s) => s.id === a.salonId) : undefined;
+    if (!a || !salon || normalizarCodigo(codigo) !== salon.codigo) {
+      fallidos++;
+      return { ok: false, error: "Usuario o código del salón incorrectos." };
+    }
+    fallidos = 0;
     alumno = a;
+    invitado = null;
     return { ok: true };
+  });
+
+  ipcMain.handle("entrarInvitado", () => {
+    alumno = null;
+    invitado = { memes: false };
   });
 
   ipcMain.handle("salir", () => {
     alumno = null;
+    invitado = null;
   });
 
   ipcMain.handle("record", () => (alumno ? record(alumno) : null));
@@ -185,9 +202,11 @@ function registrarIpc() {
   });
 
   ipcMain.handle("elegirMeme", (_e, ppm: number, referencia: number | null) => {
-    if (!paquete || !alumno) return null;
-    const m = memesDe(alumno);
-    if (m.bloqueados || !m.activos) return null;
+    if (!paquete) return null;
+    if (alumno) {
+      const m = memesDe(alumno);
+      if (m.bloqueados || !m.activos) return null;
+    } else if (!invitado?.memes) return null;
     const categoria = categoriaDe(ppm, referencia);
     const candidatos = paquete.memes.filter((x) =>
       x.criterio === "record" ? x.categoria === categoria : (x.ppm_min === null || ppm >= x.ppm_min) && (x.ppm_max === null || ppm < x.ppm_max),
@@ -197,6 +216,7 @@ function registrarIpc() {
   });
 
   ipcMain.handle("cambiarMemes", (_e, activos: boolean) => {
+    if (invitado) invitado.memes = !!activos; // solo mientras dure la sesión
     if (!alumno) return;
     almacen.memes[alumno.id] = !!activos;
     guardarAlmacen();
@@ -232,6 +252,7 @@ function registrarIpc() {
       escribirSeguro("paquete.tlpaquete", texto);
       paquete = p;
       alumno = null;
+      invitado = null;
       return { ok: true, alumnos: p.alumnos.length };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "No se pudo leer el paquete." };

@@ -3,7 +3,8 @@ import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("typelake", {
   estado: () => ipcRenderer.invoke("estado"),
-  entrar: (usuario: string, clave: string) => ipcRenderer.invoke("entrar", usuario, clave),
+  entrar: (usuario: string, codigo: string) => ipcRenderer.invoke("entrar", usuario, codigo),
+  entrarInvitado: () => ipcRenderer.invoke("entrarInvitado"),
   salir: () => ipcRenderer.invoke("salir"),
   record: () => ipcRenderer.invoke("record"),
   guardar: (r: unknown) => ipcRenderer.invoke("guardar", r),

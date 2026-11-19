@@ -34,14 +34,20 @@ export default function App() {
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center gap-4">
           <Logo />
           <span className="chip bg-slate-100 text-slate-500">Sin internet</span>
-          {estado.alumno && (
+          {(estado.alumno || estado.invitado) && (
             <div className="ml-auto flex items-center gap-3">
-              <span className="text-sm text-slate-600">
-                <b className="text-slate-900">
-                  {estado.alumno.nombres} {estado.alumno.apellidos}
-                </b>{" "}
-                · {estado.alumno.salon}
-              </span>
+              {estado.alumno ? (
+                <span className="text-sm text-slate-600">
+                  <b className="text-slate-900">
+                    {estado.alumno.nombres} {estado.alumno.apellidos}
+                  </b>{" "}
+                  · {estado.alumno.salon}
+                </span>
+              ) : (
+                <span className="text-sm text-slate-600">
+                  <b className="text-slate-900">Sin cuenta</b> · no se guarda nada
+                </span>
+              )}
               <button
                 className="btn btn-secundario"
                 onClick={async () => {
@@ -57,8 +63,10 @@ export default function App() {
       </header>
 
       <main className="flex-1 flex flex-col">
-        {!estado.hayPaquete ? (
-          <SinPaquete />
+        {estado.invitado ? (
+          <PracticaInvitado />
+        ) : !estado.hayPaquete ? (
+          <SinPaquete alEntrar={refrescar} />
         ) : estado.alumno ? (
           <Practica nombre={estado.alumno.nombres.split(" ")[0]} memes={estado.alumno.memes} />
         ) : (
@@ -88,7 +96,7 @@ export default function App() {
   );
 }
 
-function SinPaquete() {
+function SinPaquete({ alEntrar }: { alEntrar: () => void }) {
   return (
     <div className="flex-1 grid place-items-center px-4">
       <div className="tarjeta p-8 max-w-md text-center animate-aparecer">
@@ -96,14 +104,52 @@ function SinPaquete() {
         <p className="text-slate-600 mt-2">
           El profesor debe cargar el paquete de TypeLake en esta PC con el botón <b>Profesor</b> (abajo a la derecha).
         </p>
+        <BotonInvitado alEntrar={alEntrar} />
       </div>
+    </div>
+  );
+}
+
+function BotonInvitado({ alEntrar }: { alEntrar: () => void }) {
+  return (
+    <button
+      type="button"
+      className="btn btn-secundario w-full mt-4"
+      onClick={async () => {
+        await api.entrarInvitado();
+        alEntrar();
+      }}
+    >
+      Practicar sin cuenta
+    </button>
+  );
+}
+
+const SERVICIO_MEMES_INVITADO: ServicioMemes = {
+  elegir: (ppm, referencia) => api.elegirMeme(ppm, referencia),
+  cambiarPreferencia: (activos) => api.cambiarMemes(activos),
+};
+
+function PracticaInvitado() {
+  return (
+    <div className="flex-1 px-4 pt-8 pb-10 animate-aparecer">
+      <div className="text-center mb-8">
+        <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900">
+          ¿Qué tan rápido <span className="text-lago-600">escribes</span>?
+        </h1>
+        <p className="mt-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 inline-flex px-3 py-1.5 rounded-full">
+          Estás practicando sin cuenta: tus resultados no se guardan. Al salir se borra todo.
+        </p>
+      </div>
+      {/* "alumno" + activos:false para que la preferencia de memes no quede guardada en la PC */}
+      <PruebaMecanografia memes={{ cuenta: "alumno", activos: false, bloqueados: false }} servicioMemes={SERVICIO_MEMES_INVITADO} />
     </div>
   );
 }
 
 function Ingreso({ alEntrar }: { alEntrar: () => void }) {
   const [usuario, setUsuario] = useState("");
-  const [clave, setClave] = useState("");
+  const [codigo, setCodigo] = useState("");
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
 
@@ -111,7 +157,7 @@ function Ingreso({ alEntrar }: { alEntrar: () => void }) {
     e.preventDefault();
     setError("");
     setCargando(true);
-    const r = await api.entrar(usuario, clave);
+    const r = await api.entrar(usuario, codigo);
     setCargando(false);
     if (!r.ok) return setError(r.error);
     alEntrar();
@@ -122,20 +168,30 @@ function Ingreso({ alEntrar }: { alEntrar: () => void }) {
       <form onSubmit={enviar} className="tarjeta p-8 w-full max-w-sm space-y-4 animate-aparecer">
         <div className="text-center">
           <h1 className="text-2xl font-extrabold text-slate-900">¡Bienvenido a TypeLake!</h1>
-          <p className="text-sm text-slate-500 mt-1">Ingresa con el usuario y la contraseña que te dio tu profesor.</p>
+          <p className="text-sm text-slate-500 mt-1">Ingresa con tu usuario y el código de tu salón.</p>
         </div>
         <label className="block text-sm font-medium text-slate-700">
           Usuario
           <input autoFocus value={usuario} onChange={(e) => setUsuario(e.target.value)} className="campo mt-1" autoComplete="off" />
         </label>
         <label className="block text-sm font-medium text-slate-700">
-          Contraseña
-          <input type="password" value={clave} onChange={(e) => setClave(e.target.value)} className="campo mt-1" />
+          Código del salón
+          <input
+            value={codigo}
+            onChange={(e) => setCodigo(e.target.value.toUpperCase())}
+            className="campo mt-1 font-mono tracking-widest uppercase"
+            autoComplete="off"
+            maxLength={8}
+          />
         </label>
         {error && <p className="text-sm text-rose-600">{error}</p>}
-        <button className="btn btn-primario w-full" disabled={cargando || !usuario || !clave}>
+        <button className="btn btn-primario w-full" disabled={cargando || !usuario || !codigo}>
           {cargando ? <Spinner /> : "Entrar"}
         </button>
+        <div className="flex items-center gap-3 text-xs text-slate-400">
+          <span className="h-px flex-1 bg-slate-200" />o<span className="h-px flex-1 bg-slate-200" />
+        </div>
+        <BotonInvitado alEntrar={alEntrar} />
       </form>
     </div>
   );
